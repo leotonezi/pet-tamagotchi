@@ -13,6 +13,92 @@ pub const MAX_SPECIES_LEN: usize = 16;
 pub mod pet_tamagotchi {
     use super::*;
 
+    pub fn feed(ctx: Context<PetAction>, _name: String) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        let pet = &mut ctx.accounts.pet;
+        apply_time_decay(pet, now)?;
+        pet.hunger = pet.hunger.saturating_sub(25);
+        pet.happiness = pet.happiness.saturating_add(5).min(100);
+        refresh_needs_and_health(pet);
+        pet.last_interaction = now;
+        emit!(PetFed {
+            pet: pet.key(),
+            hunger: pet.hunger,
+            happiness: pet.happiness,
+        });
+        Ok(())
+    }
+
+    pub fn walk(ctx: Context<PetAction>, _name: String) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        let pet = &mut ctx.accounts.pet;
+        apply_time_decay(pet, now)?;
+        pet.happiness = pet.happiness.saturating_add(15).min(100);
+        pet.tiredness = pet.tiredness.saturating_add(10).min(100);
+        pet.hygiene = pet.hygiene.saturating_sub(5);
+        pet.hunger = pet.hunger.saturating_add(5).min(100);
+        refresh_needs_and_health(pet);
+        pet.last_interaction = now;
+        emit!(PetWalked {
+            pet: pet.key(),
+            happiness: pet.happiness,
+            tiredness: pet.tiredness,
+            hygiene: pet.hygiene,
+            hunger: pet.hunger,
+        });
+        Ok(())
+    }
+
+    pub fn bathe(ctx: Context<PetAction>, _name: String) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        let pet = &mut ctx.accounts.pet;
+        apply_time_decay(pet, now)?;
+        pet.hygiene = pet.hygiene.saturating_add(50).min(100);
+        pet.happiness = pet.happiness.saturating_add(5).min(100);
+        refresh_needs_and_health(pet);
+        pet.last_interaction = now;
+        emit!(PetBathed {
+            pet: pet.key(),
+            hygiene: pet.hygiene,
+            happiness: pet.happiness,
+        });
+        Ok(())
+    }
+
+    pub fn sleep(ctx: Context<PetAction>, _name: String) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        let pet = &mut ctx.accounts.pet;
+        apply_time_decay(pet, now)?;
+        pet.tiredness = pet.tiredness.saturating_sub(50);
+        pet.hunger = pet.hunger.saturating_add(5).min(100);
+        refresh_needs_and_health(pet);
+        pet.last_interaction = now;
+        emit!(PetSlept {
+            pet: pet.key(),
+            tiredness: pet.tiredness,
+            hunger: pet.hunger,
+        });
+        Ok(())
+    }
+
+    pub fn play(ctx: Context<PetAction>, _name: String) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        let pet = &mut ctx.accounts.pet;
+        apply_time_decay(pet, now)?;
+        pet.happiness = pet.happiness.saturating_add(20).min(100);
+        pet.tiredness = pet.tiredness.saturating_add(10).min(100);
+        pet.hunger = pet.hunger.saturating_add(5).min(100);
+        refresh_needs_and_health(pet);
+        pet.last_interaction = now;
+        emit!(PetPlayed {
+            pet: pet.key(),
+            happiness: pet.happiness,
+            tiredness: pet.tiredness,
+            hunger: pet.hunger,
+        });
+        Ok(())
+    }
+
     pub fn create_pet(
         ctx: Context<CreatePet>,
         name: String,
@@ -72,6 +158,20 @@ pub struct CreatePet<'info> {
     )]
     pub pet: Account<'info, Pet>,
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(name: String)]
+pub struct PetAction<'info> {
+    pub owner: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [b"pet", owner.key().as_ref(), name.as_bytes()],
+        bump = pet.bump,
+        has_one = owner @ PetError::Unauthorized,
+        constraint = pet.is_alive @ PetError::PetDeceased,
+    )]
+    pub pet: Account<'info, Pet>,
 }
 
 // ── Account ───────────────────────────────────────────────────────────────────

@@ -13,13 +13,66 @@ pub const MAX_SPECIES_LEN: usize = 16;
 pub mod pet_tamagotchi {
     use super::*;
 
-    pub fn initialize(_ctx: Context<Initialize>) -> Result<()> {
+    pub fn create_pet(
+        ctx: Context<CreatePet>,
+        name: String,
+        species: String,
+        birth_date: i64,
+    ) -> Result<()> {
+        require!(!name.is_empty(), PetError::NameEmpty);
+        require!(name.len() <= MAX_NAME_LEN, PetError::NameTooLong);
+        require!(species.len() <= MAX_SPECIES_LEN, PetError::SpeciesTooLong);
+
+        let now = Clock::get()?.unix_timestamp;
+        let hunger = 30u8;
+        let tiredness = 20u8;
+        let hygiene = 80u8;
+        let happiness = 70u8;
+
+        let pet = &mut ctx.accounts.pet;
+        pet.owner = ctx.accounts.owner.key();
+        pet.name = name.clone();
+        pet.species = species.clone();
+        pet.birth_date = birth_date;
+        pet.hunger = hunger;
+        pet.tiredness = tiredness;
+        pet.hygiene = hygiene;
+        pet.happiness = happiness;
+        pet.health = compute_health(hunger, tiredness, hygiene, happiness);
+        pet.needs_meal = hunger > 70;
+        pet.needs_walk = happiness < 60;
+        pet.needs_bath = hygiene < 40;
+        pet.is_alive = true;
+        pet.last_interaction = now;
+        pet.bump = ctx.bumps.pet;
+
+        emit!(PetCreated {
+            owner: pet.owner,
+            name,
+            species,
+        });
+
         Ok(())
     }
 }
 
+// ── Accounts ──────────────────────────────────────────────────────────────────
+
 #[derive(Accounts)]
-pub struct Initialize {}
+#[instruction(name: String)]
+pub struct CreatePet<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    #[account(
+        init,
+        payer = owner,
+        space = Pet::MAX_SIZE,
+        seeds = [b"pet", owner.key().as_ref(), name.as_bytes()],
+        bump,
+    )]
+    pub pet: Account<'info, Pet>,
+    pub system_program: Program<'info, System>,
+}
 
 // ── Account ───────────────────────────────────────────────────────────────────
 
@@ -117,4 +170,57 @@ pub struct StatusChecked {
     pub pet:      Pubkey,
     pub health:   u8,
     pub is_alive: bool,
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+fn compute_health(hunger: u8, tiredness: u8, hygiene: u8, happiness: u8) -> u8 {
+    let score = (100u16.saturating_sub(hunger as u16)
+        + 100u16.saturating_sub(tiredness as u16)
+        + hygiene as u16
+        + happiness as u16)
+        / 4;
+    score as u8
+}
+
+fn apply_time_decay(pet: &mut Pet, now: i64) -> Result<()> {
+    let elapsed_secs = now
+        .checked_sub(pet.last_interaction)
+        .ok_or(PetError::MathOverflow)?;
+
+    if elapsed_secs <= 0 {
+        return Ok(());
+    }
+
+    let hours = (elapsed_secs / 3600) as u16;
+
+    // hunger +1 per 4 hours
+    let hunger_gain = (hours / 4).min(100) as u8;
+    pet.hunger = pet.hunger.saturating_add(hunger_gain).min(100);
+
+    // tiredness −1 per 4 hours (natural rest)
+    let tired_loss = (hours / 4).min(100) as u8;
+    pet.tiredness = pet.tiredness.saturating_sub(tired_loss);
+
+    // hygiene −1 per 6 hours
+    let hygiene_loss = (hours / 6).min(100) as u8;
+    pet.hygiene = pet.hygiene.saturating_sub(hygiene_loss);
+
+    Ok(())
+}
+
+fn refresh_needs_and_health(pet: &mut Pet) {
+    pet.health = compute_health(pet.hunger, pet.tiredness, pet.hygiene, pet.happiness);
+    pet.needs_meal = pet.hunger > 70;
+    pet.needs_walk = pet.happiness < 60;
+    pet.needs_bath = pet.hygiene < 40;
+
+    if pet.hunger > 95 || pet.hygiene < 10 || pet.happiness < 5 {
+        pet.is_alive = false;
+    }
+}
+
+fn require_alive(pet: &Pet) -> Result<()> {
+    require!(pet.is_alive, PetError::PetDeceased);
+    Ok(())
 }

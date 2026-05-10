@@ -99,6 +99,22 @@ pub mod pet_tamagotchi {
         Ok(())
     }
 
+    pub fn check_status(ctx: Context<CheckStatus>, _name: String) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        let pet = &mut ctx.accounts.pet;
+        if pet.is_alive {
+            apply_time_decay(pet, now)?;
+            refresh_needs_and_health(pet);
+        }
+        pet.last_interaction = now;
+        emit!(StatusChecked {
+            pet: pet.key(),
+            health: pet.health,
+            is_alive: pet.is_alive,
+        });
+        Ok(())
+    }
+
     pub fn create_pet(
         ctx: Context<CreatePet>,
         name: String,
@@ -158,6 +174,19 @@ pub struct CreatePet<'info> {
     )]
     pub pet: Account<'info, Pet>,
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(name: String)]
+pub struct CheckStatus<'info> {
+    pub owner: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [b"pet", owner.key().as_ref(), name.as_bytes()],
+        bump = pet.bump,
+        has_one = owner @ PetError::Unauthorized,
+    )]
+    pub pet: Account<'info, Pet>,
 }
 
 #[derive(Accounts)]
@@ -320,7 +349,3 @@ fn refresh_needs_and_health(pet: &mut Pet) {
     }
 }
 
-fn require_alive(pet: &Pet) -> Result<()> {
-    require!(pet.is_alive, PetError::PetDeceased);
-    Ok(())
-}

@@ -1,12 +1,13 @@
-import { AnchorProvider } from "@coral-xyz/anchor";
+import anchor from "@coral-xyz/anchor";
 import { Connection, Keypair } from "@solana/web3.js";
-import NodeWallet from "@coral-xyz/anchor/dist/cjs/nodewallet";
-import { PetTamagotchiClient } from "./petClient";
+import { PetTamagotchiClient } from "./petClient.js";
+
+const { AnchorProvider, Wallet } = anchor;
 
 async function main() {
   const connection = new Connection("http://localhost:8899", "confirmed");
   const payer = Keypair.generate();
-  const wallet = new NodeWallet(payer);
+  const wallet = new Wallet(payer);
   const provider = new AnchorProvider(connection, wallet, {
     commitment: "confirmed",
   });

@@ -1,7 +1,18 @@
-import { AnchorProvider, BN, Program } from "@coral-xyz/anchor";
+import type { AnchorProvider, Program } from "@coral-xyz/anchor";
+import anchor from "@coral-xyz/anchor";
+
+type BN = InstanceType<typeof anchor.BN>;
 import { PublicKey } from "@solana/web3.js";
-import { PetTamagotchi } from "../target/types/pet_tamagotchi";
-import IDL from "../target/idl/pet_tamagotchi.json";
+import type { PetTamagotchi } from "../target/types/pet_tamagotchi.js";
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { join, dirname } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const IDL = JSON.parse(
+  readFileSync(join(__dirname, "../target/idl/pet_tamagotchi.json"), "utf-8")
+) as PetTamagotchi;
 
 export interface PetInfo {
   publicKey: PublicKey;
@@ -28,7 +39,7 @@ export class PetTamagotchiClient {
 
   constructor(provider: AnchorProvider) {
     this.provider = provider;
-    this.program = new Program<PetTamagotchi>(IDL as PetTamagotchi, provider);
+    this.program = new anchor.Program<PetTamagotchi>(IDL, provider);
   }
 
   derivePetPda(owner: PublicKey, name: string): [PublicKey, number] {
@@ -44,7 +55,7 @@ export class PetTamagotchiClient {
     birthDate: number = Math.floor(Date.now() / 1000)
   ): Promise<string> {
     return this.program.methods
-      .createPet(name, species, new BN(birthDate))
+      .createPet(name, species, new anchor.BN(birthDate))
       .accounts({ owner: this.provider.wallet.publicKey })
       .rpc();
   }
@@ -103,7 +114,7 @@ export class PetTamagotchiClient {
     const accounts = await this.program.account.pet.all([
       {
         memcmp: {
-          offset: 8, // skip 8-byte discriminator; owner field is first
+          offset: 8,
           bytes: owner.toBase58(),
         },
       },

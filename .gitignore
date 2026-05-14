@@ -12,5 +12,8 @@ dist/
 # Keys (never commit)
 *.json.bak
 
+# Solana test validator ledger
+test-ledger/
+
 # OS
 .DS_Store

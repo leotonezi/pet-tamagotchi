@@ -1,5 +1,7 @@
 # Build artifacts
 target/
+!target/idl/
+!target/types/
 .anchor/
 
 # Node

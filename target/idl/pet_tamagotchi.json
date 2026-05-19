@@ -1505,6 +1505,10 @@
             "type": "u8"
           },
           {
+            "name": "mint_bump",
+            "type": "u8"
+          },
+          {
             "name": "mint",
             "type": "pubkey"
           },

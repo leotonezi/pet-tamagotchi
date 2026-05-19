@@ -14,6 +14,11 @@ pub const MAX_SPECIES_LEN: usize = 16;
 pub const INVENTORY_SLOTS: usize = 8;
 
 // ── R2: $PETZ Token constants ─────────────────────────────────────────────────
+
+// S-01: hard-coded deployer gate — only this key may call initialize_mint.
+// TODO: replace with actual deployer pubkey before mainnet if different from current wallet.
+pub const DEPLOYER: Pubkey = pubkey!("JECoRyH53YqQcACYmB5eQNGqhwdSwRTdyWVD7X4wTEmN");
+
 pub const PETZ_DECIMALS: u8 = 6;
 pub const DAILY_CLAIM_COOLDOWN_SECS: i64 = 86_400;
 pub const BASE_REWARD: u64 = 10_000_000;
@@ -227,9 +232,10 @@ pub mod pet_tamagotchi {
     // ── R2 instructions ───────────────────────────────────────────────────────
 
     pub fn initialize_mint(ctx: Context<InitializeMint>) -> Result<()> {
-        // 1. Cache bump
+        // 1. Cache bumps
         let mint_authority = &mut ctx.accounts.mint_authority;
         mint_authority.bump = ctx.bumps.mint_authority;
+        mint_authority.mint_bump = ctx.bumps.petz_mint; // S-02: cache petz_mint bump
         mint_authority.mint = ctx.accounts.petz_mint.key();
         mint_authority.total_minted = 0;
 
@@ -249,6 +255,9 @@ pub mod pet_tamagotchi {
         let claim_state = &mut ctx.accounts.claim_state;
         claim_state.owner = ctx.accounts.owner.key();
         claim_state.pet = ctx.accounts.pet.key();
+        // SECURITY: last_claim_ts = 0 (Unix epoch) means first claim is immediately eligible.
+        // now - 0 >> DAILY_CLAIM_COOLDOWN_SECS always, so no 24h wait on first claim.
+        // Do NOT change to = now: that would force a 24h wait after account creation.
         claim_state.last_claim_ts = 0;
         claim_state.total_claims = 0;
         claim_state.bump = ctx.bumps.claim_state;
@@ -268,6 +277,10 @@ pub mod pet_tamagotchi {
 
     pub fn claim_daily_reward(ctx: Context<ClaimDailyReward>, pet_name: String) -> Result<()> {
         // 1. Validate cooldown
+        // SECURITY [S-05 P3]: last_claim_ts is initialized to 0 in init_claim_state, so the
+        // first claim always passes the cooldown check regardless of current time (now - 0 >= 86400
+        // is always true for any real clock value). This is intentional by design — first-claim
+        // should not require a 24-hour wait — but should be explicitly documented here.
         let now = Clock::get()?.unix_timestamp;
         let claim_state = &ctx.accounts.claim_state;
         let elapsed = now
@@ -303,6 +316,11 @@ pub mod pet_tamagotchi {
             .min(MAX_REWARD_PER_CLAIM);
 
         // 4. CPI: mint_to with mint_authority PDA signer seeds
+        // SECURITY [S-02 P2]: mint_authority.bump is loaded from on-chain state (correctly
+        // cached at init). However the petz_mint `mint` account in ClaimDailyReward uses
+        // `bump` (Anchor re-derives) rather than a cached bump, causing unnecessary re-derive
+        // overhead. Low exploitability risk but inconsistent pattern — store petz_mint bump
+        // in MintAuthority or use `bump = mint_authority.mint_bump` for clarity.
         let mint_authority_bump = ctx.accounts.mint_authority.bump;
         let signer_seeds: &[&[&[u8]]] = &[&[b"mint_authority", &[mint_authority_bump]]];
 
@@ -319,14 +337,20 @@ pub mod pet_tamagotchi {
             amount,
         )?;
 
-        // 5. Update claim state
+        // 5. Update claim state — use checked_add so audit counters error on overflow (S-03)
         let claim_state = &mut ctx.accounts.claim_state;
         claim_state.last_claim_ts = now;
-        claim_state.total_claims = claim_state.total_claims.saturating_add(1);
+        claim_state.total_claims = claim_state
+            .total_claims
+            .checked_add(1)
+            .ok_or(PetError::MathOverflow)?;
 
-        // 6. Update mint authority total_minted
+        // 6. Update mint authority total_minted — checked_add for reliable audit counter (S-03)
         let mint_authority = &mut ctx.accounts.mint_authority;
-        mint_authority.total_minted = mint_authority.total_minted.saturating_add(amount);
+        mint_authority.total_minted = mint_authority
+            .total_minted
+            .checked_add(amount)
+            .ok_or(PetError::MathOverflow)?;
 
         // 7. Emit event
         emit!(DailyRewardClaimed {
@@ -515,7 +539,8 @@ pub struct UseItem<'info> {
 
 #[derive(Accounts)]
 pub struct InitializeMint<'info> {
-    #[account(mut)]
+    // S-01: gate to hard-coded deployer — prevents any arbitrary signer from racing to init
+    #[account(mut, constraint = authority.key() == DEPLOYER @ PetError::Unauthorized)]
     pub authority: Signer<'info>,
     #[account(
         init,
@@ -589,12 +614,15 @@ pub struct ClaimDailyReward<'info> {
         has_one = mint @ PetError::MintMismatch,
     )]
     pub mint_authority: Account<'info, MintAuthority>,
+    // S-02: use cached bump instead of re-deriving on every claim
     #[account(
         mut,
         seeds = [b"petz_mint"],
-        bump,
+        bump = mint_authority.mint_bump,
     )]
     pub mint: Account<'info, Mint>,
+    // SECURITY: init_if_needed is safe here — ATA address is fully determined by (mint, owner),
+    // preventing any attacker from substituting a pre-existing account at a different address.
     #[account(
         init_if_needed,
         payer = owner,
@@ -663,13 +691,14 @@ impl ItemSlot {
 #[account]
 pub struct MintAuthority {
     pub bump:          u8,       // 1
+    pub mint_bump:     u8,       // 1 — cached petz_mint PDA bump (S-02)
     pub mint:          Pubkey,   // 32
     pub total_minted:  u64,      // 8
 }
 
 impl MintAuthority {
-    // 8 (disc) + 1 + 32 + 8 = 49 total (but disc counted separately) → SIZE = 8 + 49 = 57
-    pub const SIZE: usize = 8 + 1 + 32 + 8; // 49 bytes data + 8 disc = 57
+    // 8 (disc) + 1 + 1 + 32 + 8 = 50
+    pub const SIZE: usize = 8 + 1 + 1 + 32 + 8; // 50 bytes data + 8 disc = 58
 }
 
 #[account]

@@ -1511,6 +1511,10 @@ export type PetTamagotchi = {
             "type": "u8"
           },
           {
+            "name": "mintBump",
+            "type": "u8"
+          },
+          {
             "name": "mint",
             "type": "pubkey"
           },

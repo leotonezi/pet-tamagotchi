@@ -60,6 +60,90 @@
       ]
     },
     {
+      "name": "buy_item",
+      "discriminator": [
+        80,
+        82,
+        193,
+        201,
+        216,
+        27,
+        70,
+        184
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "inventory"
+          ]
+        },
+        {
+          "name": "inventory",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  110,
+                  118,
+                  101,
+                  110,
+                  116,
+                  111,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  101,
+                  97,
+                  115,
+                  117,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "item_id",
+          "type": "u8"
+        },
+        {
+          "name": "qty",
+          "type": "u8"
+        }
+      ]
+    },
+    {
       "name": "check_status",
       "discriminator": [
         52,
@@ -226,6 +310,57 @@
       ]
     },
     {
+      "name": "init_inventory",
+      "discriminator": [
+        90,
+        204,
+        87,
+        203,
+        119,
+        160,
+        165,
+        142
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "inventory",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  110,
+                  118,
+                  101,
+                  110,
+                  116,
+                  111,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "play",
       "discriminator": [
         213,
@@ -330,6 +465,89 @@
       ]
     },
     {
+      "name": "use_item",
+      "discriminator": [
+        38,
+        85,
+        191,
+        23,
+        255,
+        151,
+        204,
+        199
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": [
+            "inventory",
+            "pet"
+          ]
+        },
+        {
+          "name": "inventory",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  110,
+                  118,
+                  101,
+                  110,
+                  116,
+                  111,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pet",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "arg",
+                "path": "pet_name"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "item_id",
+          "type": "u8"
+        },
+        {
+          "name": "_pet_name",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "walk",
       "discriminator": [
         117,
@@ -384,6 +602,19 @@
   ],
   "accounts": [
     {
+      "name": "Inventory",
+      "discriminator": [
+        97,
+        218,
+        167,
+        233,
+        216,
+        170,
+        49,
+        27
+      ]
+    },
+    {
       "name": "Pet",
       "discriminator": [
         180,
@@ -398,6 +629,32 @@
     }
   ],
   "events": [
+    {
+      "name": "ItemBought",
+      "discriminator": [
+        164,
+        239,
+        51,
+        167,
+        116,
+        135,
+        31,
+        189
+      ]
+    },
+    {
+      "name": "ItemUsed",
+      "discriminator": [
+        147,
+        118,
+        226,
+        55,
+        55,
+        28,
+        7,
+        238
+      ]
+    },
     {
       "name": "PetBathed",
       "discriminator": [
@@ -520,9 +777,130 @@
       "code": 6005,
       "name": "Unauthorized",
       "msg": "Caller is not the pet owner"
+    },
+    {
+      "code": 6006,
+      "name": "InventoryFull",
+      "msg": "Inventory is full"
+    },
+    {
+      "code": 6007,
+      "name": "ItemUnknown",
+      "msg": "Unknown item ID"
+    },
+    {
+      "code": 6008,
+      "name": "InsufficientItems",
+      "msg": "Not enough items in inventory"
+    },
+    {
+      "code": 6009,
+      "name": "InsufficientFunds",
+      "msg": "Insufficient SOL to purchase item"
     }
   ],
   "types": [
+    {
+      "name": "Inventory",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "slots",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "ItemSlot"
+                  }
+                },
+                8
+              ]
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ItemBought",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "item_id",
+            "type": "u8"
+          },
+          {
+            "name": "qty",
+            "type": "u8"
+          },
+          {
+            "name": "total_lamports",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ItemSlot",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "item_id",
+            "type": "u8"
+          },
+          {
+            "name": "qty",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ItemUsed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pet",
+            "type": "pubkey"
+          },
+          {
+            "name": "item_id",
+            "type": "u8"
+          },
+          {
+            "name": "hunger",
+            "type": "u8"
+          },
+          {
+            "name": "hygiene",
+            "type": "u8"
+          },
+          {
+            "name": "happiness",
+            "type": "u8"
+          },
+          {
+            "name": "tiredness",
+            "type": "u8"
+          }
+        ]
+      }
+    },
     {
       "name": "Pet",
       "type": {
@@ -586,6 +964,10 @@
           },
           {
             "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "version",
             "type": "u8"
           }
         ]

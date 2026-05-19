@@ -1,7 +1,7 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program, AnchorError } from "@coral-xyz/anchor";
 import BN from "bn.js";
-import { Keypair, PublicKey } from "@solana/web3.js";
+import { Keypair, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { startAnchor, BankrunProvider } from "anchor-bankrun";
 import { Clock } from "solana-bankrun";
 import { assert } from "chai";
@@ -23,6 +23,24 @@ function derivePet(owner: PublicKey, name: string): PublicKey {
   );
   return pda;
 }
+
+function deriveInventory(owner: PublicKey): PublicKey {
+  const [pda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("inventory"), owner.toBuffer()],
+    PROGRAM_ID
+  );
+  return pda;
+}
+
+function deriveTreasury(): PublicKey {
+  const [pda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("treasury")],
+    PROGRAM_ID
+  );
+  return pda;
+}
+
+const ITEM_PRICE = 10_000_000; // 0.01 SOL per item
 
 async function expectAnchorError(
   promise: Promise<unknown>,
@@ -275,6 +293,157 @@ describe("pet_tamagotchi", () => {
       program.methods.feed(name).accounts({ owner }).rpc(),
       "PetDeceased"
     );
+  });
+
+  // ── R1: Item Shop ─────────────────────────────────────────────────────────────
+
+  // 11: init_inventory
+  it("initInventory: creates inventory PDA with empty slots", async () => {
+    const owner = provider.wallet.publicKey;
+    const invPda = deriveInventory(owner);
+
+    await program.methods.initInventory().accounts({ owner }).rpc();
+
+    const inv = await program.account.inventory.fetch(invPda);
+    assert.ok(inv.owner.equals(owner), "owner field");
+    assert.strictEqual(inv.slots.length, 8, "8 slots");
+    assert.ok(inv.slots.every((s: any) => s.qty === 0), "all slots empty");
+  });
+
+  // 12: buy_item happy path (item 0 = Apple)
+  it("buyItem: deducts lamports, fills slot, emits event", async () => {
+    const owner = provider.wallet.publicKey;
+    const invPda = deriveInventory(owner);
+    const treasuryPda = deriveTreasury();
+
+    const treasuryBefore = await context.banksClient.getBalance(treasuryPda);
+    await program.methods.buyItem(0, 2).accounts({ owner }).rpc();
+
+    const inv = await program.account.inventory.fetch(invPda);
+    const slot = inv.slots.find((s: any) => s.qty > 0 && s.itemId === 0);
+    assert.ok(slot, "slot for Apple exists");
+    assert.strictEqual(slot.qty, 2, "qty = 2");
+
+    const treasuryAfter = await context.banksClient.getBalance(treasuryPda);
+    assert.strictEqual(
+      Number(treasuryAfter) - Number(treasuryBefore),
+      2 * ITEM_PRICE,
+      "treasury received 2 × price"
+    );
+  });
+
+  // 13: buy_item unknown item_id → ItemUnknown
+  it("buyItem: unknown item_id → ItemUnknown", async () => {
+    const owner = provider.wallet.publicKey;
+    await expectAnchorError(
+      program.methods.buyItem(99, 1).accounts({ owner }).rpc(),
+      "ItemUnknown"
+    );
+  });
+
+  // 14: use_item (Apple, item_id=0) — hunger −30, happiness +5
+  it("useItem: Apple applies correct stat deltas", async () => {
+    const owner = provider.wallet.publicKey;
+    const petName = "ShopPet";
+    const petPda = derivePet(owner, petName);
+    const invPda = deriveInventory(owner);
+
+    await program.methods.createPet(petName, "Dog", new BN(0)).accounts({ owner }).rpc();
+    // Buy 1 Apple (item_id=0); inventory already exists from test 11
+    await program.methods.buyItem(0, 1).accounts({ owner }).rpc();
+
+    const before = await program.account.pet.fetch(petPda);
+    await program.methods.useItem(0, petName).accounts({ owner }).rpc();
+    const after = await program.account.pet.fetch(petPda);
+
+    // Apple: hunger -30, happiness +5
+    const expectedHunger = Math.max(0, Math.min(100, before.hunger - 30));
+    const expectedHappiness = Math.min(100, before.happiness + 5);
+    assert.strictEqual(after.hunger, expectedHunger, "hunger -30");
+    assert.strictEqual(after.happiness, expectedHappiness, "happiness +5");
+
+    // Verify slot qty decremented
+    const inv = await program.account.inventory.fetch(invPda);
+    const appleSlot = inv.slots.find((s: any) => s.itemId === 0 && s.qty > 0);
+    // All apples used (we had 2 from test 12 + 1 from this test = 3, used 1 → 2)
+    assert.ok(appleSlot === undefined || appleSlot.qty < 3, "qty decremented");
+  });
+
+  // 15: use_item on dead pet → PetDeceased
+  it("useItem: dead pet → PetDeceased", async () => {
+    const owner = provider.wallet.publicKey;
+    const petName = "DeadShopPet";
+
+    await program.methods.createPet(petName, "Cat", new BN(0)).accounts({ owner }).rpc();
+
+    // Kill via time warp
+    const clock = await context.banksClient.getClock();
+    context.setClock(
+      new Clock(
+        clock.slot,
+        clock.epochStartTimestamp,
+        clock.epoch,
+        clock.leaderScheduleEpoch,
+        clock.unixTimestamp + BigInt(400 * 3600)
+      )
+    );
+    await program.methods.checkStatus(petName).accounts({ owner }).rpc();
+
+    // Buy item and try to use on dead pet
+    await program.methods.buyItem(1, 1).accounts({ owner }).rpc(); // Soap
+    await expectAnchorError(
+      program.methods.useItem(1, petName).accounts({ owner }).rpc(),
+      "PetDeceased"
+    );
+  });
+
+  // 16: use_item with no items in inventory → InsufficientItems
+  it("useItem: no items in slot → InsufficientItems", async () => {
+    const owner = provider.wallet.publicKey;
+    const petName = "ShopPet"; // reuse alive pet from earlier
+
+    await expectAnchorError(
+      // item_id=3 (Pillow) — never bought in this suite
+      program.methods.useItem(3, petName).accounts({ owner }).rpc(),
+      "InsufficientItems"
+    );
+  });
+
+  // 17: use_item with time-warp — decay applied before item effect
+  it("useItem: decay applied before item effect (6h warp)", async () => {
+    const owner = provider.wallet.publicKey;
+    const petName = "DecayShopPet";
+    const petPda = derivePet(owner, petName);
+
+    await program.methods.createPet(petName, "Rabbit", new BN(0)).accounts({ owner }).rpc();
+    await program.methods.buyItem(2, 1).accounts({ owner }).rpc(); // Toy: happiness +30, tiredness +10
+
+    // Warp 6h: hygiene -1, hunger +1, tiredness -1
+    const clock = await context.banksClient.getClock();
+    context.setClock(
+      new Clock(
+        clock.slot,
+        clock.epochStartTimestamp,
+        clock.epoch,
+        clock.leaderScheduleEpoch,
+        clock.unixTimestamp + BigInt(6 * 3600)
+      )
+    );
+
+    const before = await program.account.pet.fetch(petPda);
+    await program.methods.useItem(2, petName).accounts({ owner }).rpc();
+    const after = await program.account.pet.fetch(petPda);
+
+    // After 6h decay: hunger +1, tiredness -1, hygiene -1; then Toy: happiness +30, tiredness +10
+    const expHunger = Math.min(100, before.hunger + 1);
+    const expTiredness = Math.min(100, Math.max(0, before.tiredness - 1) + 10);
+    const expHygiene = Math.max(0, before.hygiene - 1);
+    const expHappiness = Math.min(100, before.happiness + 30);
+
+    assert.strictEqual(after.hunger, expHunger, "hunger after decay + toy");
+    assert.strictEqual(after.tiredness, expTiredness, "tiredness after decay + toy");
+    assert.strictEqual(after.hygiene, expHygiene, "hygiene after decay + toy");
+    assert.strictEqual(after.happiness, expHappiness, "happiness after decay + toy");
   });
 
   // ── 10: unauthorized signer ───────────────────────────────────────────────────

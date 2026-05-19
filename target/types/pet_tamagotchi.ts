@@ -66,6 +66,90 @@ export type PetTamagotchi = {
       ]
     },
     {
+      "name": "buyItem",
+      "discriminator": [
+        80,
+        82,
+        193,
+        201,
+        216,
+        27,
+        70,
+        184
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "inventory"
+          ]
+        },
+        {
+          "name": "inventory",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  110,
+                  118,
+                  101,
+                  110,
+                  116,
+                  111,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  114,
+                  101,
+                  97,
+                  115,
+                  117,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "itemId",
+          "type": "u8"
+        },
+        {
+          "name": "qty",
+          "type": "u8"
+        }
+      ]
+    },
+    {
       "name": "checkStatus",
       "discriminator": [
         52,
@@ -232,6 +316,57 @@ export type PetTamagotchi = {
       ]
     },
     {
+      "name": "initInventory",
+      "discriminator": [
+        90,
+        204,
+        87,
+        203,
+        119,
+        160,
+        165,
+        142
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "inventory",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  110,
+                  118,
+                  101,
+                  110,
+                  116,
+                  111,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "play",
       "discriminator": [
         213,
@@ -336,6 +471,89 @@ export type PetTamagotchi = {
       ]
     },
     {
+      "name": "useItem",
+      "discriminator": [
+        38,
+        85,
+        191,
+        23,
+        255,
+        151,
+        204,
+        199
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true,
+          "relations": [
+            "inventory",
+            "pet"
+          ]
+        },
+        {
+          "name": "inventory",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  110,
+                  118,
+                  101,
+                  110,
+                  116,
+                  111,
+                  114,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pet",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "arg",
+                "path": "petName"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "itemId",
+          "type": "u8"
+        },
+        {
+          "name": "petName",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "walk",
       "discriminator": [
         117,
@@ -390,6 +608,19 @@ export type PetTamagotchi = {
   ],
   "accounts": [
     {
+      "name": "inventory",
+      "discriminator": [
+        97,
+        218,
+        167,
+        233,
+        216,
+        170,
+        49,
+        27
+      ]
+    },
+    {
       "name": "pet",
       "discriminator": [
         180,
@@ -404,6 +635,32 @@ export type PetTamagotchi = {
     }
   ],
   "events": [
+    {
+      "name": "itemBought",
+      "discriminator": [
+        164,
+        239,
+        51,
+        167,
+        116,
+        135,
+        31,
+        189
+      ]
+    },
+    {
+      "name": "itemUsed",
+      "discriminator": [
+        147,
+        118,
+        226,
+        55,
+        55,
+        28,
+        7,
+        238
+      ]
+    },
     {
       "name": "petBathed",
       "discriminator": [
@@ -526,9 +783,130 @@ export type PetTamagotchi = {
       "code": 6005,
       "name": "unauthorized",
       "msg": "Caller is not the pet owner"
+    },
+    {
+      "code": 6006,
+      "name": "inventoryFull",
+      "msg": "Inventory is full"
+    },
+    {
+      "code": 6007,
+      "name": "itemUnknown",
+      "msg": "Unknown item ID"
+    },
+    {
+      "code": 6008,
+      "name": "insufficientItems",
+      "msg": "Not enough items in inventory"
+    },
+    {
+      "code": 6009,
+      "name": "insufficientFunds",
+      "msg": "Insufficient SOL to purchase item"
     }
   ],
   "types": [
+    {
+      "name": "inventory",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "slots",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "itemSlot"
+                  }
+                },
+                8
+              ]
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "itemBought",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "itemId",
+            "type": "u8"
+          },
+          {
+            "name": "qty",
+            "type": "u8"
+          },
+          {
+            "name": "totalLamports",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "itemSlot",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "itemId",
+            "type": "u8"
+          },
+          {
+            "name": "qty",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "itemUsed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pet",
+            "type": "pubkey"
+          },
+          {
+            "name": "itemId",
+            "type": "u8"
+          },
+          {
+            "name": "hunger",
+            "type": "u8"
+          },
+          {
+            "name": "hygiene",
+            "type": "u8"
+          },
+          {
+            "name": "happiness",
+            "type": "u8"
+          },
+          {
+            "name": "tiredness",
+            "type": "u8"
+          }
+        ]
+      }
+    },
     {
       "name": "pet",
       "type": {
@@ -592,6 +970,10 @@ export type PetTamagotchi = {
           },
           {
             "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "version",
             "type": "u8"
           }
         ]

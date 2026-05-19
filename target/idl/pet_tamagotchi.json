@@ -196,6 +196,249 @@
       ]
     },
     {
+      "name": "claim_daily_reward",
+      "discriminator": [
+        24,
+        130,
+        79,
+        89,
+        83,
+        137,
+        178,
+        108
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "pet",
+            "claim_state"
+          ]
+        },
+        {
+          "name": "pet",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "arg",
+                "path": "pet_name"
+              }
+            ]
+          }
+        },
+        {
+          "name": "claim_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  108,
+                  97,
+                  105,
+                  109,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "arg",
+                "path": "pet_name"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint_authority",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  116,
+                  122,
+                  95,
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          },
+          "relations": [
+            "mint_authority"
+          ]
+        },
+        {
+          "name": "user_ata",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "const",
+                "value": [
+                  6,
+                  221,
+                  246,
+                  225,
+                  215,
+                  101,
+                  161,
+                  147,
+                  217,
+                  203,
+                  225,
+                  70,
+                  206,
+                  235,
+                  121,
+                  172,
+                  28,
+                  180,
+                  133,
+                  237,
+                  95,
+                  91,
+                  55,
+                  145,
+                  58,
+                  140,
+                  245,
+                  133,
+                  126,
+                  255,
+                  0,
+                  169
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "pet_name",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "create_pet",
       "discriminator": [
         31,
@@ -310,6 +553,94 @@
       ]
     },
     {
+      "name": "init_claim_state",
+      "discriminator": [
+        115,
+        138,
+        168,
+        205,
+        208,
+        70,
+        75,
+        181
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "pet"
+          ]
+        },
+        {
+          "name": "pet",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "arg",
+                "path": "pet_name"
+              }
+            ]
+          }
+        },
+        {
+          "name": "claim_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  108,
+                  97,
+                  105,
+                  109,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "arg",
+                "path": "pet_name"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "pet_name",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "init_inventory",
       "discriminator": [
         90,
@@ -356,6 +687,88 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initialize_mint",
+      "discriminator": [
+        209,
+        42,
+        195,
+        4,
+        129,
+        85,
+        209,
+        44
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mint_authority",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "petz_mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  116,
+                  122,
+                  95,
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
         }
       ],
       "args": []
@@ -602,6 +1015,19 @@
   ],
   "accounts": [
     {
+      "name": "ClaimState",
+      "discriminator": [
+        71,
+        73,
+        19,
+        83,
+        53,
+        228,
+        242,
+        53
+      ]
+    },
+    {
       "name": "Inventory",
       "discriminator": [
         97,
@@ -612,6 +1038,19 @@
         170,
         49,
         27
+      ]
+    },
+    {
+      "name": "MintAuthority",
+      "discriminator": [
+        148,
+        0,
+        219,
+        228,
+        254,
+        237,
+        76,
+        128
       ]
     },
     {
@@ -629,6 +1068,32 @@
     }
   ],
   "events": [
+    {
+      "name": "ClaimStateInitialized",
+      "discriminator": [
+        119,
+        10,
+        5,
+        184,
+        103,
+        109,
+        160,
+        203
+      ]
+    },
+    {
+      "name": "DailyRewardClaimed",
+      "discriminator": [
+        148,
+        21,
+        255,
+        155,
+        242,
+        125,
+        124,
+        57
+      ]
+    },
     {
       "name": "ItemBought",
       "discriminator": [
@@ -653,6 +1118,19 @@
         28,
         7,
         238
+      ]
+    },
+    {
+      "name": "MintInitialized",
+      "discriminator": [
+        46,
+        171,
+        107,
+        161,
+        175,
+        104,
+        236,
+        230
       ]
     },
     {
@@ -797,9 +1275,125 @@
       "code": 6009,
       "name": "InsufficientFunds",
       "msg": "Insufficient SOL to purchase item"
+    },
+    {
+      "code": 6010,
+      "name": "ClaimCooldownActive",
+      "msg": "Daily reward claim cooldown is still active"
+    },
+    {
+      "code": 6011,
+      "name": "MintMismatch",
+      "msg": "Mint account does not match expected mint"
+    },
+    {
+      "code": 6012,
+      "name": "RewardOverflow",
+      "msg": "Reward amount calculation overflowed"
     }
   ],
   "types": [
+    {
+      "name": "ClaimState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "pet",
+            "type": "pubkey"
+          },
+          {
+            "name": "last_claim_ts",
+            "type": "i64"
+          },
+          {
+            "name": "total_claims",
+            "type": "u32"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "_padding",
+            "type": {
+              "array": [
+                "u8",
+                7
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "ClaimStateInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "pet",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DailyRewardClaimed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "pet",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "base_amount",
+            "type": "u64"
+          },
+          {
+            "name": "happiness_bonus",
+            "type": "u64"
+          },
+          {
+            "name": "health_bonus",
+            "type": "u64"
+          },
+          {
+            "name": "perfect_care_bonus",
+            "type": "u64"
+          },
+          {
+            "name": "total_claims",
+            "type": "u32"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
     {
       "name": "Inventory",
       "type": {
@@ -897,6 +1491,50 @@
           {
             "name": "tiredness",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MintAuthority",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "total_minted",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MintInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "decimals",
+            "type": "u8"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
           }
         ]
       }

@@ -1,5 +1,9 @@
 #![allow(unexpected_cfgs, deprecated)]
 use anchor_lang::prelude::*;
+use anchor_spl::{
+    associated_token::AssociatedToken,
+    token::{self, Mint, MintTo, Token, TokenAccount},
+};
 
 declare_id!("CWcAV2sS6BLjY953X92R7YXgYDZJsnomqcbE1Ru65CfC");
 
@@ -8,6 +12,19 @@ declare_id!("CWcAV2sS6BLjY953X92R7YXgYDZJsnomqcbE1Ru65CfC");
 pub const MAX_NAME_LEN: usize = 32;
 pub const MAX_SPECIES_LEN: usize = 16;
 pub const INVENTORY_SLOTS: usize = 8;
+
+// ── R2: $PETZ Token constants ─────────────────────────────────────────────────
+pub const PETZ_DECIMALS: u8 = 6;
+pub const DAILY_CLAIM_COOLDOWN_SECS: i64 = 86_400;
+pub const BASE_REWARD: u64 = 10_000_000;
+pub const HAPPINESS_BONUS: u64 = 5_000_000;
+pub const HEALTH_BONUS: u64 = 5_000_000;
+pub const PERFECT_CARE_BONUS: u64 = 5_000_000;
+pub const MAX_REWARD_PER_CLAIM: u64 = 25_000_000;
+pub const HAPPINESS_BONUS_THRESHOLD: u8 = 80;
+pub const HEALTH_BONUS_THRESHOLD: u8 = 80;
+pub const PERFECT_CARE_HUNGER_MAX: u8 = 20;
+pub const PERFECT_CARE_HYGIENE_MIN: u8 = 80;
 
 // ── Program ───────────────────────────────────────────────────────────────────
 
@@ -207,6 +224,127 @@ pub mod pet_tamagotchi {
         Ok(())
     }
 
+    // ── R2 instructions ───────────────────────────────────────────────────────
+
+    pub fn initialize_mint(ctx: Context<InitializeMint>) -> Result<()> {
+        // 1. Cache bump
+        let mint_authority = &mut ctx.accounts.mint_authority;
+        mint_authority.bump = ctx.bumps.mint_authority;
+        mint_authority.mint = ctx.accounts.petz_mint.key();
+        mint_authority.total_minted = 0;
+
+        // 2. Emit event
+        let now = Clock::get()?.unix_timestamp;
+        emit!(MintInitialized {
+            mint: ctx.accounts.petz_mint.key(),
+            authority: ctx.accounts.mint_authority.key(),
+            decimals: PETZ_DECIMALS,
+            timestamp: now,
+        });
+        Ok(())
+    }
+
+    pub fn init_claim_state(ctx: Context<InitClaimState>, pet_name: String) -> Result<()> {
+        // 1. Validate pet exists and owner matches (enforced by has_one constraint)
+        let claim_state = &mut ctx.accounts.claim_state;
+        claim_state.owner = ctx.accounts.owner.key();
+        claim_state.pet = ctx.accounts.pet.key();
+        claim_state.last_claim_ts = 0;
+        claim_state.total_claims = 0;
+        claim_state.bump = ctx.bumps.claim_state;
+        claim_state._padding = [0u8; 7];
+
+        // 2. Emit event
+        let now = Clock::get()?.unix_timestamp;
+        emit!(ClaimStateInitialized {
+            owner: ctx.accounts.owner.key(),
+            pet: ctx.accounts.pet.key(),
+            timestamp: now,
+        });
+
+        let _ = pet_name; // used in seeds derivation via #[instruction]
+        Ok(())
+    }
+
+    pub fn claim_daily_reward(ctx: Context<ClaimDailyReward>, pet_name: String) -> Result<()> {
+        // 1. Validate cooldown
+        let now = Clock::get()?.unix_timestamp;
+        let claim_state = &ctx.accounts.claim_state;
+        let elapsed = now
+            .checked_sub(claim_state.last_claim_ts)
+            .ok_or(PetError::MathOverflow)?;
+        require!(elapsed >= DAILY_CLAIM_COOLDOWN_SECS, PetError::ClaimCooldownActive);
+
+        // 2. Validate pet is alive (enforced by constraint in accounts struct)
+        let pet = &ctx.accounts.pet;
+
+        // 3. Compute reward breakdown
+        let happiness_bonus = if pet.happiness >= HAPPINESS_BONUS_THRESHOLD {
+            HAPPINESS_BONUS
+        } else {
+            0u64
+        };
+        let health_bonus = if pet.health >= HEALTH_BONUS_THRESHOLD {
+            HEALTH_BONUS
+        } else {
+            0u64
+        };
+        let perfect_care_bonus =
+            if pet.hunger <= PERFECT_CARE_HUNGER_MAX && pet.hygiene >= PERFECT_CARE_HYGIENE_MIN {
+                PERFECT_CARE_BONUS
+            } else {
+                0u64
+            };
+
+        let amount = BASE_REWARD
+            .saturating_add(happiness_bonus)
+            .saturating_add(health_bonus)
+            .saturating_add(perfect_care_bonus)
+            .min(MAX_REWARD_PER_CLAIM);
+
+        // 4. CPI: mint_to with mint_authority PDA signer seeds
+        let mint_authority_bump = ctx.accounts.mint_authority.bump;
+        let signer_seeds: &[&[&[u8]]] = &[&[b"mint_authority", &[mint_authority_bump]]];
+
+        token::mint_to(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                MintTo {
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.user_ata.to_account_info(),
+                    authority: ctx.accounts.mint_authority.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            amount,
+        )?;
+
+        // 5. Update claim state
+        let claim_state = &mut ctx.accounts.claim_state;
+        claim_state.last_claim_ts = now;
+        claim_state.total_claims = claim_state.total_claims.saturating_add(1);
+
+        // 6. Update mint authority total_minted
+        let mint_authority = &mut ctx.accounts.mint_authority;
+        mint_authority.total_minted = mint_authority.total_minted.saturating_add(amount);
+
+        // 7. Emit event
+        emit!(DailyRewardClaimed {
+            owner: ctx.accounts.owner.key(),
+            pet: ctx.accounts.pet.key(),
+            amount,
+            base_amount: BASE_REWARD,
+            happiness_bonus,
+            health_bonus,
+            perfect_care_bonus,
+            total_claims: claim_state.total_claims,
+            timestamp: now,
+        });
+
+        let _ = pet_name; // used in seeds derivation via #[instruction]
+        Ok(())
+    }
+
     pub fn create_pet(
         ctx: Context<CreatePet>,
         name: String,
@@ -373,6 +511,103 @@ pub struct UseItem<'info> {
     pub pet: Account<'info, Pet>,
 }
 
+// ── R2: Token account contexts ────────────────────────────────────────────────
+
+#[derive(Accounts)]
+pub struct InitializeMint<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    #[account(
+        init,
+        payer = authority,
+        space = MintAuthority::SIZE,
+        seeds = [b"mint_authority"],
+        bump,
+    )]
+    pub mint_authority: Account<'info, MintAuthority>,
+    #[account(
+        init,
+        payer = authority,
+        seeds = [b"petz_mint"],
+        bump,
+        mint::decimals = PETZ_DECIMALS,
+        mint::authority = mint_authority,
+        mint::freeze_authority = mint_authority,
+    )]
+    pub petz_mint: Account<'info, Mint>,
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
+}
+
+#[derive(Accounts)]
+#[instruction(pet_name: String)]
+pub struct InitClaimState<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    #[account(
+        seeds = [b"pet", owner.key().as_ref(), pet_name.as_bytes()],
+        bump = pet.bump,
+        has_one = owner @ PetError::Unauthorized,
+    )]
+    pub pet: Account<'info, Pet>,
+    #[account(
+        init,
+        payer = owner,
+        space = ClaimState::SIZE,
+        seeds = [b"claim_state", owner.key().as_ref(), pet_name.as_bytes()],
+        bump,
+    )]
+    pub claim_state: Account<'info, ClaimState>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(pet_name: String)]
+pub struct ClaimDailyReward<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    #[account(
+        seeds = [b"pet", owner.key().as_ref(), pet_name.as_bytes()],
+        bump = pet.bump,
+        has_one = owner @ PetError::Unauthorized,
+        constraint = pet.is_alive @ PetError::PetDeceased,
+    )]
+    pub pet: Account<'info, Pet>,
+    #[account(
+        mut,
+        seeds = [b"claim_state", owner.key().as_ref(), pet_name.as_bytes()],
+        bump = claim_state.bump,
+        has_one = owner @ PetError::Unauthorized,
+        constraint = claim_state.pet == pet.key() @ PetError::Unauthorized,
+    )]
+    pub claim_state: Account<'info, ClaimState>,
+    #[account(
+        mut,
+        seeds = [b"mint_authority"],
+        bump = mint_authority.bump,
+        has_one = mint @ PetError::MintMismatch,
+    )]
+    pub mint_authority: Account<'info, MintAuthority>,
+    #[account(
+        mut,
+        seeds = [b"petz_mint"],
+        bump,
+    )]
+    pub mint: Account<'info, Mint>,
+    #[account(
+        init_if_needed,
+        payer = owner,
+        associated_token::mint = mint,
+        associated_token::authority = owner,
+    )]
+    pub user_ata: Account<'info, TokenAccount>,
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
+}
+
 // ── Account ───────────────────────────────────────────────────────────────────
 
 #[account]
@@ -423,6 +658,35 @@ impl ItemSlot {
     pub const SIZE: usize = 3;
 }
 
+// ── R2: Token account data ────────────────────────────────────────────────────
+
+#[account]
+pub struct MintAuthority {
+    pub bump:          u8,       // 1
+    pub mint:          Pubkey,   // 32
+    pub total_minted:  u64,      // 8
+}
+
+impl MintAuthority {
+    // 8 (disc) + 1 + 32 + 8 = 49 total (but disc counted separately) → SIZE = 8 + 49 = 57
+    pub const SIZE: usize = 8 + 1 + 32 + 8; // 49 bytes data + 8 disc = 57
+}
+
+#[account]
+pub struct ClaimState {
+    pub owner:         Pubkey,   // 32
+    pub pet:           Pubkey,   // 32
+    pub last_claim_ts: i64,      // 8
+    pub total_claims:  u32,      // 4
+    pub bump:          u8,       // 1
+    pub _padding:      [u8; 7],  // 7
+}
+
+impl ClaimState {
+    // 8 (disc) + 32 + 32 + 8 + 4 + 1 + 7 = 92 total
+    pub const SIZE: usize = 8 + 32 + 32 + 8 + 4 + 1 + 7;
+}
+
 // ── Errors ────────────────────────────────────────────────────────────────────
 
 #[error_code]
@@ -447,6 +711,12 @@ pub enum PetError {
     InsufficientItems,
     #[msg("Insufficient SOL to purchase item")]
     InsufficientFunds,
+    #[msg("Daily reward claim cooldown is still active")]
+    ClaimCooldownActive,
+    #[msg("Mint account does not match expected mint")]
+    MintMismatch,
+    #[msg("Reward amount calculation overflowed")]
+    RewardOverflow,
 }
 
 // ── Events ────────────────────────────────────────────────────────────────────
@@ -519,6 +789,34 @@ pub struct ItemUsed {
     pub hygiene:   u8,
     pub happiness: u8,
     pub tiredness: u8,
+}
+
+#[event]
+pub struct MintInitialized {
+    pub mint:      Pubkey,
+    pub authority: Pubkey,
+    pub decimals:  u8,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct ClaimStateInitialized {
+    pub owner:     Pubkey,
+    pub pet:       Pubkey,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct DailyRewardClaimed {
+    pub owner:               Pubkey,
+    pub pet:                 Pubkey,
+    pub amount:              u64,
+    pub base_amount:         u64,
+    pub happiness_bonus:     u64,
+    pub health_bonus:        u64,
+    pub perfect_care_bonus:  u64,
+    pub total_claims:        u32,
+    pub timestamp:           i64,
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

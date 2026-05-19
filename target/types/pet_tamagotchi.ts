@@ -202,6 +202,249 @@ export type PetTamagotchi = {
       ]
     },
     {
+      "name": "claimDailyReward",
+      "discriminator": [
+        24,
+        130,
+        79,
+        89,
+        83,
+        137,
+        178,
+        108
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "pet",
+            "claimState"
+          ]
+        },
+        {
+          "name": "pet",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "arg",
+                "path": "petName"
+              }
+            ]
+          }
+        },
+        {
+          "name": "claimState",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  108,
+                  97,
+                  105,
+                  109,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "arg",
+                "path": "petName"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mintAuthority",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  116,
+                  122,
+                  95,
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          },
+          "relations": [
+            "mintAuthority"
+          ]
+        },
+        {
+          "name": "userAta",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "const",
+                "value": [
+                  6,
+                  221,
+                  246,
+                  225,
+                  215,
+                  101,
+                  161,
+                  147,
+                  217,
+                  203,
+                  225,
+                  70,
+                  206,
+                  235,
+                  121,
+                  172,
+                  28,
+                  180,
+                  133,
+                  237,
+                  95,
+                  91,
+                  55,
+                  145,
+                  58,
+                  140,
+                  245,
+                  133,
+                  126,
+                  255,
+                  0,
+                  169
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "tokenProgram",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associatedTokenProgram",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "petName",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "createPet",
       "discriminator": [
         31,
@@ -316,6 +559,94 @@ export type PetTamagotchi = {
       ]
     },
     {
+      "name": "initClaimState",
+      "discriminator": [
+        115,
+        138,
+        168,
+        205,
+        208,
+        70,
+        75,
+        181
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "pet"
+          ]
+        },
+        {
+          "name": "pet",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "arg",
+                "path": "petName"
+              }
+            ]
+          }
+        },
+        {
+          "name": "claimState",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  108,
+                  97,
+                  105,
+                  109,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "arg",
+                "path": "petName"
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "petName",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "initInventory",
       "discriminator": [
         90,
@@ -362,6 +693,88 @@ export type PetTamagotchi = {
         {
           "name": "systemProgram",
           "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initializeMint",
+      "discriminator": [
+        209,
+        42,
+        195,
+        4,
+        129,
+        85,
+        209,
+        44
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mintAuthority",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116,
+                  95,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "petzMint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  116,
+                  122,
+                  95,
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "tokenProgram",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
         }
       ],
       "args": []
@@ -608,6 +1021,19 @@ export type PetTamagotchi = {
   ],
   "accounts": [
     {
+      "name": "claimState",
+      "discriminator": [
+        71,
+        73,
+        19,
+        83,
+        53,
+        228,
+        242,
+        53
+      ]
+    },
+    {
       "name": "inventory",
       "discriminator": [
         97,
@@ -618,6 +1044,19 @@ export type PetTamagotchi = {
         170,
         49,
         27
+      ]
+    },
+    {
+      "name": "mintAuthority",
+      "discriminator": [
+        148,
+        0,
+        219,
+        228,
+        254,
+        237,
+        76,
+        128
       ]
     },
     {
@@ -635,6 +1074,32 @@ export type PetTamagotchi = {
     }
   ],
   "events": [
+    {
+      "name": "claimStateInitialized",
+      "discriminator": [
+        119,
+        10,
+        5,
+        184,
+        103,
+        109,
+        160,
+        203
+      ]
+    },
+    {
+      "name": "dailyRewardClaimed",
+      "discriminator": [
+        148,
+        21,
+        255,
+        155,
+        242,
+        125,
+        124,
+        57
+      ]
+    },
     {
       "name": "itemBought",
       "discriminator": [
@@ -659,6 +1124,19 @@ export type PetTamagotchi = {
         28,
         7,
         238
+      ]
+    },
+    {
+      "name": "mintInitialized",
+      "discriminator": [
+        46,
+        171,
+        107,
+        161,
+        175,
+        104,
+        236,
+        230
       ]
     },
     {
@@ -803,9 +1281,125 @@ export type PetTamagotchi = {
       "code": 6009,
       "name": "insufficientFunds",
       "msg": "Insufficient SOL to purchase item"
+    },
+    {
+      "code": 6010,
+      "name": "claimCooldownActive",
+      "msg": "Daily reward claim cooldown is still active"
+    },
+    {
+      "code": 6011,
+      "name": "mintMismatch",
+      "msg": "Mint account does not match expected mint"
+    },
+    {
+      "code": 6012,
+      "name": "rewardOverflow",
+      "msg": "Reward amount calculation overflowed"
     }
   ],
   "types": [
+    {
+      "name": "claimState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "pet",
+            "type": "pubkey"
+          },
+          {
+            "name": "lastClaimTs",
+            "type": "i64"
+          },
+          {
+            "name": "totalClaims",
+            "type": "u32"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "padding",
+            "type": {
+              "array": [
+                "u8",
+                7
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "claimStateInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "pet",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "dailyRewardClaimed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "pet",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "baseAmount",
+            "type": "u64"
+          },
+          {
+            "name": "happinessBonus",
+            "type": "u64"
+          },
+          {
+            "name": "healthBonus",
+            "type": "u64"
+          },
+          {
+            "name": "perfectCareBonus",
+            "type": "u64"
+          },
+          {
+            "name": "totalClaims",
+            "type": "u32"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
     {
       "name": "inventory",
       "type": {
@@ -903,6 +1497,50 @@ export type PetTamagotchi = {
           {
             "name": "tiredness",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "mintAuthority",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "totalMinted",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "mintInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "decimals",
+            "type": "u8"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
           }
         ]
       }

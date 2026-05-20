@@ -21,11 +21,17 @@
   "include": [
     "client/**/*.ts",
     "tests/**/*.ts",
-    "migrations/**/*.ts"
+    "migrations/**/*.ts",
+    "target/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
     "dist",
-    "target"
+    "target/debug",
+    "target/deploy",
+    "target/flycheck0",
+    "target/idl",
+    "target/release",
+    "target/sbpf-solana-solana"
   ]
 }

@@ -1,25 +1,25 @@
 # Agent Roster — pet-tamagotchi
 
-Reviewed by Claude Opus. Last updated: 2026-05-19.
+Reviewed by Claude Opus. Last updated: 2026-05-20.
 
 ---
 
 ## Agent Roles
 
-### 1. `roadmap-planner`
-Produces interface-level specs for a roadmap item: instruction signatures, account list, PDA seeds, events, error codes, test matrix. **No Rust code.** Output feeds `anchor-builder`.
+### 1. `feature-planner`
+Produces interface-level specs for a roadmap item: instruction signatures, account list, PDA seeds, events, error codes, test matrix. **No Rust code.** Output feeds `solana-builder`.
 
-### 2. `anchor-builder`
-Implements on-chain instructions in `programs/pet-tamagotchi/src/lib.rs`. Runs `anchor build`, commits `target/idl/pet_tamagotchi.json` and `target/types/pet_tamagotchi.ts`. Done condition: `anchor build` green + IDL committed. Owns IDL regen — no other agent touches `target/`.
+### 2. `solana-builder`
+Solana/Anchor smart contract specialist. Implements on-chain instructions in `programs/pet-tamagotchi/src/lib.rs`. Runs `anchor build`, commits `target/idl/pet_tamagotchi.json` and `target/types/pet_tamagotchi.ts`. Done condition: `anchor build` green + IDL committed. Owns IDL regen — no other agent touches `target/`.
 
-### 3. `bankrun-tester`
-Writes behavioral tests in `tests/pet_tamagotchi.ts`: stat deltas, time-warp (bankrun `setClock`), happy paths, documented errors. **Must start after `anchor-builder` finishes** (tests import `../target/types/pet_tamagotchi.js`). Runs parallel with `ts-client-updater`.
+### 3. `solana-tester`
+Solana integration test engineer. Writes behavioral tests in `tests/pet_tamagotchi.ts`: stat deltas, time-warp (bankrun `setClock`), happy paths, documented errors. **Must start after `solana-builder` finishes** (tests import `../target/types/pet_tamagotchi.js`). Runs parallel with `frontend-builder`.
 
-### 4. `ts-client-updater`
-Extends `client/petClient.ts` and `client/example.ts` after on-chain changes. Keeps PDA derivation, IDL types, and method signatures in sync. Runs parallel with `bankrun-tester` after `anchor-builder` finishes.
+### 4. `frontend-builder`
+Frontend specialist. Extends `client/petClient.ts` and `client/example.ts` after on-chain changes. Also owns the React `app/` UI. Keeps PDA derivation, IDL types, and method signatures in sync. Runs parallel with `solana-tester` after `solana-builder` finishes.
 
 ### 5. `security-auditor`
-Read-only on `programs/`. Produces structured findings: `(finding, severity, file:line, suggested fix)`. May add tests or comments, never edits instructions. If P0/P1 found, loops back to `anchor-builder` (max 2 loops).
+Read-only on `programs/`. Produces structured findings: `(finding, severity, file:line, suggested fix)`. May add tests or comments, never edits instructions. If P0/P1 found, loops back to `solana-builder` (max 2 loops).
 
 ### 6. `spl-integrator` *(activate before R2)*
 Handles `anchor-spl` and Metaplex CPI patterns: mint authority PDAs, ATA creation, `transfer_checked`, decimals, Token-2022 vs legacy. Isolated from base Anchor work.
@@ -27,8 +27,8 @@ Handles `anchor-spl` and Metaplex CPI patterns: mint authority PDAs, ATA creatio
 ### 7. `migration-planner` *(activate before R7)*
 Plans account `realloc`, discriminator versioning, zero-copy migration, rent top-up. Owns the `version: u8` field strategy and any `MAX_SIZE` changes.
 
-### 8. `frontend` *(activate at R3)*
-React + Wallet Adapter + Anchor event subscriptions. Separate toolchain from `ts-client-updater`.
+### 8. `frontend-builder` *(full React mode, activate at R3)*
+React + Wallet Adapter + Anchor event subscriptions. Separate toolchain from the client-only mode.
 
 ### 9. `indexer` *(activate at R6)*
 Helius webhooks / Geyser plugin + Postgres + REST API. Fully off-chain, no overlap with on-chain agents.
@@ -38,12 +38,12 @@ Helius webhooks / Geyser plugin + Postgres + REST API. Fully off-chain, no overl
 ## Spawn Pattern
 
 ```
-roadmap-planner
-  └─► anchor-builder          (Rust + anchor build + IDL commit)
-        ├─► bankrun-tester     (parallel)
-        └─► ts-client-updater  (parallel)
+feature-planner
+  └─► solana-builder          (Rust + anchor build + IDL commit)
+        ├─► solana-tester      (parallel)
+        └─► frontend-builder   (parallel)
               └─► security-auditor
-                    └─► anchor-builder  (only if P0/P1, max 2 loops)
+                    └─► solana-builder  (only if P0/P1, max 2 loops)
 ```
 
 ---

@@ -1,13 +1,13 @@
 ---
-name: ts-client-updater
-description: Extends client/petClient.ts and client/example.ts after on-chain changes. Use after anchor-builder finishes. Keeps PDA derivation, IDL types, and method signatures in sync. Runs parallel with bankrun-tester.
+name: frontend-builder
+description: Frontend specialist for pet-tamagotchi. Builds and extends all TypeScript/React client code — extends client/petClient.ts, client/example.ts, and app/ React UI after on-chain changes. Keeps PDA derivation, IDL types, and method signatures in sync. Use after solana-builder finishes. Runs parallel with solana-tester.
 ---
 
 You are a TypeScript developer for the pet-tamagotchi Solana client.
 
 ## Your job
 
-After `anchor-builder` adds new on-chain instructions, extend the TypeScript client to expose them. You own:
+After `solana-builder` adds new on-chain instructions, extend the TypeScript client to expose them. You own:
 - `client/petClient.ts` — the `PetTamagotchiClient` class
 - `client/example.ts` — the localnet demo script
 

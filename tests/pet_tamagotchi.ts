@@ -537,7 +537,7 @@ describe("pet_tamagotchi", () => {
     const claimStatePda = deriveClaimState(owner, petName);
     const mintPda = derivePetzMint();
     const mintAuthorityPda = deriveMintAuthority();
-    const userAta = getAssociatedTokenAddressSync(mintPda, owner);
+    const userAta = getAssociatedTokenAddressSync(mintPda, owner, false, TOKEN_PROGRAM_ID);
 
     await program.methods
       .createPet(petName, "Dog", new BN(0))
@@ -600,7 +600,7 @@ describe("pet_tamagotchi", () => {
     const owner = provider.wallet.publicKey;
     const petName = "R2PoorPet";
     const mintPda = derivePetzMint();
-    const userAta = getAssociatedTokenAddressSync(mintPda, owner);
+    const userAta = getAssociatedTokenAddressSync(mintPda, owner, false, TOKEN_PROGRAM_ID);
 
     await program.methods
       .createPet(petName, "Cat", new BN(0))
@@ -645,7 +645,7 @@ describe("pet_tamagotchi", () => {
     const petName = "R2PoorPet";
     const claimStatePda = deriveClaimState(owner, petName);
     const mintPda = derivePetzMint();
-    const userAta = getAssociatedTokenAddressSync(mintPda, owner);
+    const userAta = getAssociatedTokenAddressSync(mintPda, owner, false, TOKEN_PROGRAM_ID);
 
     // warp clock by exactly 86_400 seconds
     const clock = await context.banksClient.getClock();

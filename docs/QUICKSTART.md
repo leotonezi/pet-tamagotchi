@@ -60,6 +60,6 @@ All 10 tests should pass. No validator needed — tests use bankrun.
 
 ## What's next
 
-- Read `ARCHITECTURE.md` for the full data model and decay math.
-- Read `FEATURES.md` for the post-MVP roadmap.
+- Read `ARCHITECTURE.md` for the full data model and decay math (same folder).
+- Read `FEATURES.md` for the post-MVP roadmap (same folder).
 - Import `PetTamagotchiClient` from `client/petClient.ts` to build your own UI.

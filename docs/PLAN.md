@@ -265,11 +265,18 @@ npx ts-node client/example.ts   # prints real tx signatures + pet status
 
 ## Roadmap (Post-MVP)
 
+### Done
+
 | Priority | Feature | Key work |
 |----------|---------|---------|
 | R1 | Item Shop | `Inventory` PDA, `ItemSlot` enum, `use_item` ix |
 | R2 | SPL Token ($PETZ) | Mint authority PDA, `anchor-spl` CPI, `claim_daily_reward` |
 | R3 | Web UI | React + Wallet Adapter, reuse `petClient.ts`, event subscriptions |
+
+### Upcoming
+
+| Priority | Feature | Key work |
+|----------|---------|---------|
 | R4 | Breeding | `breed` ix, slot-hash RNG, stat inheritance |
 | R5 | NFTs | Metaplex CPI on `create_pet`, URI update on life events |
 | R6 | Leaderboards | Off-chain indexer (Helius/Geyser) → Postgres + REST |

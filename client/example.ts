@@ -37,6 +37,33 @@ async function main() {
   console.log("\n=== All pets by owner ===");
   const all = await client.listPetsByOwner(payer.publicKey);
   console.log(`Found ${all.length} pet(s)`);
+
+  console.log("\n=== R2: $PETZ Token ===");
+
+  console.log("initializeMint...");
+  try {
+    const mintTx = await client.initializeMint();
+    console.log("tx:", mintTx);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.log("initializeMint skipped (already initialized):", msg.slice(0, 80));
+  }
+
+  console.log("initClaimState...");
+  const claimStateTx = await client.initClaimState(name);
+  console.log("tx:", claimStateTx);
+
+  console.log("claimDailyReward...");
+  const claimTx = await client.claimDailyReward(name);
+  console.log("tx:", claimTx);
+
+  const balance = await client.getPetzBalance(payer.publicKey);
+  console.log(`\nPETZ balance: ${balance.toFixed(6)} $PETZ`);
+
+  const claimState = await client.fetchClaimState(payer.publicKey, name);
+  if (claimState) {
+    console.log("\n" + PetTamagotchiClient.formatClaimState(claimState));
+  }
 }
 
 main().catch(console.error);

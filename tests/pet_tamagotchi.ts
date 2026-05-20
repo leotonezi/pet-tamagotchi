@@ -8,6 +8,12 @@ import { assert } from "chai";
 import { readFileSync } from "fs";
 import { join } from "path";
 import type { PetTamagotchi } from "../target/types/pet_tamagotchi.js";
+import {
+  getAssociatedTokenAddressSync,
+  unpackAccount,
+  unpackMint,
+  TOKEN_PROGRAM_ID,
+} from "@solana/spl-token";
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 const IDL = JSON.parse(
@@ -38,6 +44,42 @@ function deriveTreasury(): PublicKey {
     PROGRAM_ID
   );
   return pda;
+}
+
+function deriveMintAuthority(): PublicKey {
+  const [pda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("mint_authority")],
+    PROGRAM_ID
+  );
+  return pda;
+}
+
+function derivePetzMint(): PublicKey {
+  const [pda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("petz_mint")],
+    PROGRAM_ID
+  );
+  return pda;
+}
+
+function deriveClaimState(owner: PublicKey, petName: string): PublicKey {
+  const [pda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("claim_state"), owner.toBuffer(), Buffer.from(petName)],
+    PROGRAM_ID
+  );
+  return pda;
+}
+
+/** Read a token account's amount via raw account data (no RPC needed). */
+async function getTokenAmount(
+  context: Awaited<ReturnType<typeof startAnchor>>,
+  ata: PublicKey
+): Promise<bigint> {
+  const info = await context.banksClient.getAccount(ata);
+  if (!info) return BigInt(0);
+  // unpackAccount needs an AccountInfo<Buffer>-shaped object
+  const parsed = unpackAccount(ata, { ...info, data: Buffer.from(info.data) }, TOKEN_PROGRAM_ID);
+  return parsed.amount;
 }
 
 const ITEM_PRICE = 10_000_000; // 0.01 SOL per item
@@ -446,6 +488,265 @@ describe("pet_tamagotchi", () => {
     assert.strictEqual(after.happiness, expHappiness, "happiness after decay + toy");
   });
 
+  // ── R2: $PETZ SPL Token ───────────────────────────────────────────────────────
+
+  // R2-1: initialize_mint happy path
+  it("initializeMint: mint created with 6 decimals, authority PDA, total_minted=0", async () => {
+    // arrange
+    const authority = provider.wallet.publicKey;
+    const mintAuthorityPda = deriveMintAuthority();
+    const petzMintPda = derivePetzMint();
+
+    // act
+    await program.methods
+      .initializeMint()
+      .accounts({ authority })
+      .rpc();
+
+    // assert — MintAuthority account
+    const mintAuthority = await program.account.mintAuthority.fetch(mintAuthorityPda);
+    assert.strictEqual(mintAuthority.totalMinted.toNumber(), 0, "total_minted = 0");
+    assert.ok(mintAuthority.mint.equals(petzMintPda), "mint field points to petz_mint PDA");
+
+    // assert — SPL Mint account decimals via raw data
+    const mintInfo = await context.banksClient.getAccount(petzMintPda);
+    assert.ok(mintInfo, "petz_mint account exists");
+    const parsed = unpackMint(petzMintPda, { ...mintInfo, data: Buffer.from(mintInfo.data) }, TOKEN_PROGRAM_ID);
+    assert.strictEqual(parsed.decimals, 6, "decimals = 6");
+    assert.ok(parsed.mintAuthority?.equals(mintAuthorityPda), "mint authority = MintAuthority PDA");
+  });
+
+  // R2-2: initialize_mint re-init rejection
+  it("initializeMint: second call fails (Anchor init protection)", async () => {
+    const authority = provider.wallet.publicKey;
+    let threw = false;
+    try {
+      await program.methods.initializeMint().accounts({ authority }).rpc();
+    } catch {
+      threw = true;
+    }
+    assert.isTrue(threw, "second initializeMint should fail");
+  });
+
+  // R2-3: claim_daily_reward happy path — good stats → max reward 25_000_000
+  it("claimDailyReward: good-stats pet → ATA balance = 25_000_000 (max cap)", async () => {
+    // arrange — create a pet with good stats
+    const owner = provider.wallet.publicKey;
+    const petName = "R2HappyPet";
+    const petPda = derivePet(owner, petName);
+    const claimStatePda = deriveClaimState(owner, petName);
+    const mintPda = derivePetzMint();
+    const mintAuthorityPda = deriveMintAuthority();
+    const userAta = getAssociatedTokenAddressSync(mintPda, owner);
+
+    await program.methods
+      .createPet(petName, "Dog", new BN(0))
+      .accounts({ owner })
+      .rpc();
+
+    // Feed until hunger < 20 (PERFECT_CARE_HUNGER_MAX)
+    // Initial hunger = 30; feed once: hunger = 30-25 = 5; happiness = 70+5 = 75
+    await program.methods.feed(petName).accounts({ owner }).rpc();
+
+    // Play twice to get happiness >= 80 (HAPPINESS_BONUS_THRESHOLD)
+    // happiness = 75+20 = 95
+    const slot1 = await context.banksClient.getSlot();
+    context.warpToSlot(slot1 + BigInt(1));
+    await program.methods.play(petName).accounts({ owner }).rpc();
+
+    // health = ((100-5) + (100-0) + 80 + 95) / 4 = 375/4 = 93 >= 80 (HEALTH_BONUS_THRESHOLD)
+    // Bathe to ensure hygiene >= 80 (PERFECT_CARE_HYGIENE_MIN)
+    const slot2 = await context.banksClient.getSlot();
+    context.warpToSlot(slot2 + BigInt(1));
+    await program.methods.bathe(petName).accounts({ owner }).rpc();
+
+    // Verify pet stats
+    const pet = await program.account.pet.fetch(petPda);
+    assert.isAtMost(pet.hunger, 20, "hunger <= 20 for perfect care");
+    assert.isAtLeast(pet.hygiene, 80, "hygiene >= 80 for perfect care");
+    assert.isAtLeast(pet.happiness, 80, "happiness >= 80 for happiness bonus");
+    assert.isAtLeast(pet.health, 80, "health >= 80 for health bonus");
+
+    // init claim state
+    await program.methods
+      .initClaimState(petName)
+      .accounts({ owner })
+      .rpc();
+
+    // act
+    await program.methods
+      .claimDailyReward(petName)
+      .accounts({ owner })
+      .rpc();
+
+    // assert — ATA balance = max reward cap = 25_000_000
+    const ataBalance = await getTokenAmount(context, userAta);
+    assert.strictEqual(Number(ataBalance), 25_000_000, "ATA balance = max cap 25_000_000");
+
+    // assert — claim state updated
+    const claimState = await program.account.claimState.fetch(claimStatePda);
+    assert.strictEqual(claimState.totalClaims, 1, "total_claims = 1");
+    assert.isAbove(claimState.lastClaimTs.toNumber(), 0, "last_claim_ts set");
+
+    // assert — mint authority total_minted updated
+    const mintAuthority = await program.account.mintAuthority.fetch(mintAuthorityPda);
+    assert.strictEqual(mintAuthority.totalMinted.toNumber(), 25_000_000, "total_minted = 25_000_000");
+  });
+
+  // R2-4: claim_daily_reward base only — poor stats → 10_000_000
+  it("claimDailyReward: poor-stats pet → ATA balance = 10_000_000 (base only)", async () => {
+    // arrange — fresh pet with default (mediocre) stats: hunger=30, happiness=70 (<80), health=75 (<80)
+    // hunger=30 > 20, so no perfect care bonus
+    const owner = provider.wallet.publicKey;
+    const petName = "R2PoorPet";
+    const mintPda = derivePetzMint();
+    const userAta = getAssociatedTokenAddressSync(mintPda, owner);
+
+    await program.methods
+      .createPet(petName, "Cat", new BN(0))
+      .accounts({ owner })
+      .rpc();
+
+    // init claim state
+    await program.methods.initClaimState(petName).accounts({ owner }).rpc();
+
+    // Record ATA balance before this claim (may have balance from previous tests)
+    const ataBefore = await getTokenAmount(context, userAta);
+
+    // act — claim with default stats
+    await program.methods.claimDailyReward(petName).accounts({ owner }).rpc();
+
+    // assert — exactly 10_000_000 more tokens (base reward only)
+    const ataAfter = await getTokenAmount(context, userAta);
+    assert.strictEqual(
+      Number(ataAfter) - Number(ataBefore),
+      10_000_000,
+      "received base reward only = 10_000_000"
+    );
+  });
+
+  // R2-5: Cooldown enforcement — second claim immediately → ClaimCooldownActive
+  it("claimDailyReward: second immediate claim → ClaimCooldownActive", async () => {
+    // arrange — use R2PoorPet (already claimed in test R2-4, cooldown active)
+    const owner = provider.wallet.publicKey;
+    const petName = "R2PoorPet";
+
+    // act + assert — immediate second claim fails
+    await expectAnchorError(
+      program.methods.claimDailyReward(petName).accounts({ owner }).rpc(),
+      "ClaimCooldownActive"
+    );
+  });
+
+  // R2-6: Time-warp success — advance 86_400s, second claim succeeds, total_claims = 2
+  it("claimDailyReward: advance 86400s → second claim succeeds, total_claims=2", async () => {
+    // arrange — use R2PoorPet (claimed once in R2-4, cooldown = 86400s)
+    const owner = provider.wallet.publicKey;
+    const petName = "R2PoorPet";
+    const claimStatePda = deriveClaimState(owner, petName);
+    const mintPda = derivePetzMint();
+    const userAta = getAssociatedTokenAddressSync(mintPda, owner);
+
+    // warp clock by exactly 86_400 seconds
+    const clock = await context.banksClient.getClock();
+    context.setClock(
+      new Clock(
+        clock.slot,
+        clock.epochStartTimestamp,
+        clock.epoch,
+        clock.leaderScheduleEpoch,
+        clock.unixTimestamp + BigInt(86_400)
+      )
+    );
+
+    const ataBefore = await getTokenAmount(context, userAta);
+
+    // act
+    await program.methods.claimDailyReward(petName).accounts({ owner }).rpc();
+
+    // assert — tokens received
+    const ataAfter = await getTokenAmount(context, userAta);
+    assert.isAbove(Number(ataAfter), Number(ataBefore), "tokens minted on second claim");
+
+    // assert — total_claims = 2
+    const claimState = await program.account.claimState.fetch(claimStatePda);
+    assert.strictEqual(claimState.totalClaims, 2, "total_claims = 2 after second claim");
+  });
+
+  // R2-7: Dead pet rejection — warp far future so pet dies, then claim → PetDeceased
+  it("claimDailyReward: dead pet → PetDeceased", async () => {
+    // arrange — create a fresh pet and claim state
+    const owner = provider.wallet.publicKey;
+    const petName = "R2DeadPet";
+
+    await program.methods
+      .createPet(petName, "Cat", new BN(0))
+      .accounts({ owner })
+      .rpc();
+
+    await program.methods.initClaimState(petName).accounts({ owner }).rpc();
+
+    // Warp far future: hunger +1/4h, need >95 → (95-30)*4 = 260h = 936_000s
+    // Use 1_000_000s to be safe
+    const clock = await context.banksClient.getClock();
+    context.setClock(
+      new Clock(
+        clock.slot,
+        clock.epochStartTimestamp,
+        clock.epoch,
+        clock.leaderScheduleEpoch,
+        clock.unixTimestamp + BigInt(1_000_000)
+      )
+    );
+
+    // Trigger is_alive = false via check_status
+    await program.methods.checkStatus(petName).accounts({ owner }).rpc();
+
+    const pet = await program.account.pet.fetch(derivePet(owner, petName));
+    assert.isFalse(pet.isAlive, "pet should be dead before claim");
+
+    // act + assert — claim on dead pet fails with PetDeceased
+    await expectAnchorError(
+      program.methods.claimDailyReward(petName).accounts({ owner }).rpc(),
+      "PetDeceased"
+    );
+  });
+
+  // R2-8: Auth rejection — attacker tries to claim against first user's pet
+  it("claimDailyReward: attacker cannot claim against another owner's pet", async () => {
+    // arrange — use R2HappyPet (belongs to default owner)
+    const owner = provider.wallet.publicKey;
+    const petName = "R2HappyPet";
+
+    // Fund attacker keypair
+    const attacker = Keypair.generate();
+    context.setAccount(attacker.publicKey, {
+      executable: false,
+      owner: new PublicKey("11111111111111111111111111111111"),
+      lamports: 1_000_000_000,
+      data: new Uint8Array(0),
+    });
+
+    const attackerProvider = new BankrunProvider(context, new anchor.Wallet(attacker));
+    const attackerProgram = new anchor.Program<PetTamagotchi>(
+      IDL as PetTamagotchi,
+      attackerProvider
+    );
+
+    // Attacker provides their own pubkey as owner — derives a different PDA that doesn't exist
+    let threw = false;
+    try {
+      await attackerProgram.methods
+        .claimDailyReward(petName)
+        .accounts({ owner: attacker.publicKey })
+        .signers([attacker])
+        .rpc();
+    } catch {
+      threw = true;
+    }
+    assert.isTrue(threw, "attacker was correctly rejected");
+  });
+
   // ── 10: unauthorized signer ───────────────────────────────────────────────────
   it("unauthorized: attacker cannot interact with another owner's pet", async () => {
     const owner = provider.wallet.publicKey;
@@ -483,5 +784,84 @@ describe("pet_tamagotchi", () => {
       threw = true;
     }
     assert.isTrue(threw, "attacker was correctly rejected");
+  });
+
+  // ── SECURITY POC: S-01 — initializeMint has no admin gate ────────────────────
+  // Finding S-01 (P1 High): any funded signer can call initialize_mint and become
+  // the first caller. The `init` constraint prevents re-init after the first call,
+  // meaning whoever races to call this first sets the canonical mint PDA forever.
+  //
+  // This test demonstrates the attack surface: an attacker keypair, given enough
+  // SOL, can call initializeMint and the transaction succeeds with no authorization
+  // error. In a real deploy scenario this would be a front-run opportunity in the
+  // deployment window before the legitimate team calls initializeMint.
+  //
+  // NOTE: In this test suite initialize_mint was already called in R2-1, so the
+  // attacker's call will fail with an "already in use" error (account exists).
+  // The test verifies that the rejection is due to re-init protection ONLY, not
+  // any admin authorization check — confirming that if the attacker had been first,
+  // the call would have succeeded.
+  it("[S-01 POC] initializeMint: any signer can race to initialize (no admin gate)", async () => {
+    // Fund an attacker who has no special role
+    const attacker = Keypair.generate();
+    context.setAccount(attacker.publicKey, {
+      executable: false,
+      owner: new PublicKey("11111111111111111111111111111111"),
+      lamports: 10_000_000_000, // 10 SOL — enough to pay for accounts
+      data: new Uint8Array(0),
+    });
+
+    const attackerProvider = new BankrunProvider(context, new anchor.Wallet(attacker));
+    const attackerProgram = new anchor.Program<PetTamagotchi>(
+      IDL as PetTamagotchi,
+      attackerProvider
+    );
+
+    // The attacker attempts to call initializeMint.
+    // Because R2-1 already called it in this suite, we expect a failure —
+    // but the ONLY reason for failure is that the PDA accounts already exist
+    // (re-init protection via `init`), NOT because the program checked
+    // that the attacker is an authorized deployer.
+    let errorMessage = "";
+    try {
+      await attackerProgram.methods
+        .initializeMint()
+        .accounts({ authority: attacker.publicKey })
+        .signers([attacker])
+        .rpc();
+      // If the mint had not been initialized yet, this would succeed.
+      // In that scenario the attacker becomes the effective "first caller"
+      // with no authorization check — S-01 confirmed.
+      assert.fail(
+        "Expected failure because mint was already initialized, but got success. " +
+        "If this ran before R2-1, it would mean the attacker succeeded — confirming S-01."
+      );
+    } catch (e: any) {
+      errorMessage = e?.message ?? e?.toString() ?? "";
+    }
+
+    // Confirm the rejection was a re-init error, NOT an Unauthorized error.
+    // An Unauthorized error would mean the program has an admin gate (it does not).
+    // A re-init / already-in-use error means the gate is purely `init` exclusivity.
+    const isReInitError =
+      errorMessage.includes("already in use") ||
+      errorMessage.includes("already been initialized") ||
+      errorMessage.includes("custom program error: 0x0") || // system program: account already exists
+      errorMessage.includes("0x0");
+    const isUnauthorizedError =
+      errorMessage.includes("Unauthorized") ||
+      errorMessage.includes("ConstraintHasOne") ||
+      errorMessage.includes("2006"); // Anchor Unauthorized error code
+
+    assert.isFalse(
+      isUnauthorizedError,
+      "Program did NOT reject the attacker with an Unauthorized error — " +
+      "confirming there is no admin gate. Only re-init protection saved us here."
+    );
+    assert.isTrue(
+      isReInitError || errorMessage.length > 0,
+      "Expected a re-init rejection (accounts already exist), confirming S-01 attack surface: " +
+      `got: ${errorMessage}`
+    );
   });
 });

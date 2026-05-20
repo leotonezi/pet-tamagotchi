@@ -3,6 +3,12 @@ import anchor from "@coral-xyz/anchor";
 
 type BN = InstanceType<typeof anchor.BN>;
 import { PublicKey } from "@solana/web3.js";
+import {
+  getAssociatedTokenAddressSync,
+  getAccount,
+  TOKEN_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+} from "@solana/spl-token";
 import type { PetTamagotchi } from "../target/types/pet_tamagotchi.js";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
@@ -32,6 +38,22 @@ export const ITEM_NAMES: Record<number, string> = {
   2: "Toy",
   3: "Pillow",
 };
+
+export interface MintAuthorityInfo {
+  publicKey: PublicKey;
+  bump: number;
+  mint: PublicKey;
+  totalMinted: BN;
+}
+
+export interface ClaimStateInfo {
+  publicKey: PublicKey;
+  owner: PublicKey;
+  pet: PublicKey;
+  lastClaimTs: BN;
+  totalClaims: number;
+  bump: number;
+}
 
 export interface PetInfo {
   publicKey: PublicKey;
@@ -194,6 +216,101 @@ export class PetTamagotchiClient {
       },
     ]);
     return accounts.map((a) => ({ publicKey: a.publicKey, ...a.account }));
+  }
+
+  deriveMintAuthorityPda(): [PublicKey, number] {
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from("mint_authority")],
+      this.program.programId
+    );
+  }
+
+  derivePetzMintPda(): [PublicKey, number] {
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from("petz_mint")],
+      this.program.programId
+    );
+  }
+
+  deriveClaimStatePda(owner: PublicKey, petName: string): [PublicKey, number] {
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from("claim_state"), owner.toBuffer(), Buffer.from(petName)],
+      this.program.programId
+    );
+  }
+
+  getUserPetzAta(owner: PublicKey): PublicKey {
+    const [mintPda] = this.derivePetzMintPda();
+    return getAssociatedTokenAddressSync(
+      mintPda,
+      owner,
+      false,
+      TOKEN_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    );
+  }
+
+  async initializeMint(): Promise<string> {
+    return this.program.methods
+      .initializeMint()
+      .accounts({ authority: this.provider.wallet.publicKey })
+      .rpc();
+  }
+
+  async initClaimState(petName: string): Promise<string> {
+    return this.program.methods
+      .initClaimState(petName)
+      .accounts({ owner: this.provider.wallet.publicKey })
+      .rpc();
+  }
+
+  async claimDailyReward(petName: string): Promise<string> {
+    return this.program.methods
+      .claimDailyReward(petName)
+      .accounts({ owner: this.provider.wallet.publicKey })
+      .rpc();
+  }
+
+  async fetchClaimState(
+    owner: PublicKey,
+    petName: string
+  ): Promise<ClaimStateInfo | null> {
+    const [pda] = this.deriveClaimStatePda(owner, petName);
+    try {
+      const account = await this.program.account.claimState.fetch(pda);
+      return { publicKey: pda, ...account };
+    } catch {
+      return null;
+    }
+  }
+
+  async getPetzBalance(owner: PublicKey): Promise<number> {
+    const ata = this.getUserPetzAta(owner);
+    try {
+      const tokenAccount = await getAccount(
+        this.provider.connection,
+        ata,
+        "confirmed",
+        TOKEN_PROGRAM_ID
+      );
+      return Number(tokenAccount.amount) / 1_000_000;
+    } catch {
+      return 0;
+    }
+  }
+
+  static formatClaimState(cs: ClaimStateInfo): string {
+    const lastClaim =
+      cs.lastClaimTs.toNumber() === 0
+        ? "never"
+        : new Date(cs.lastClaimTs.toNumber() * 1000).toISOString();
+    return [
+      `Claim State: ${cs.publicKey.toBase58()}`,
+      `  Owner:       ${cs.owner.toBase58()}`,
+      `  Pet:         ${cs.pet.toBase58()}`,
+      `  Last Claim:  ${lastClaim}`,
+      `  Total Claims:${cs.totalClaims}`,
+    ].join("\n");
   }
 
   static formatPetStatus(p: PetInfo): string {

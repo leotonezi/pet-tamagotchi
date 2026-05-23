@@ -56,7 +56,7 @@ jobs:
       - run: npm ci
 
       - name: Install Anchor CLI
-        run: npm install -g @coral-xyz/anchor-cli
+        run: npm install -g @coral-xyz/anchor-cli@0.31.1
 
       - name: anchor build
         run: anchor build

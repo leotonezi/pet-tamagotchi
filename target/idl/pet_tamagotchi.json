@@ -54,7 +54,7 @@
       ],
       "args": [
         {
-          "name": "_name",
+          "name": "name",
           "type": "string"
         }
       ]
@@ -190,7 +190,7 @@
       ],
       "args": [
         {
-          "name": "_name",
+          "name": "name",
           "type": "string"
         }
       ]
@@ -547,7 +547,7 @@
       ],
       "args": [
         {
-          "name": "_name",
+          "name": "name",
           "type": "string"
         }
       ]
@@ -820,7 +820,7 @@
       ],
       "args": [
         {
-          "name": "_name",
+          "name": "name",
           "type": "string"
         }
       ]
@@ -872,7 +872,7 @@
       ],
       "args": [
         {
-          "name": "_name",
+          "name": "name",
           "type": "string"
         }
       ]
@@ -955,7 +955,7 @@
           "type": "u8"
         },
         {
-          "name": "_pet_name",
+          "name": "pet_name",
           "type": "string"
         }
       ]
@@ -1007,7 +1007,7 @@
       ],
       "args": [
         {
-          "name": "_name",
+          "name": "name",
           "type": "string"
         }
       ]

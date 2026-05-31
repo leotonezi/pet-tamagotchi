@@ -34,3 +34,6 @@ export const ANCHOR_ERROR_MESSAGES: Record<string, string> = {
 };
 
 export const DAILY_REWARD_COOLDOWN_HOURS = 24;
+
+export const WS_LIVENESS_TIMEOUT_MS = 8_000;
+export const PET_POLL_INTERVAL_MS = 10_000;

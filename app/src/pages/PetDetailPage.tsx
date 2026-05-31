@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { usePet } from "../hooks/usePet";
 import { usePetActions } from "../hooks/usePetActions";
 import { usePetEvents } from "../hooks/usePetEvents";
+import { PET_POLL_INTERVAL_MS } from "../constants";
 import { PetAvatar } from "../components/pet/PetAvatar";
 import { StatGrid } from "../components/pet/StatGrid";
 import { ActionPanel } from "../components/pet/ActionPanel";
@@ -21,7 +22,7 @@ export function PetDetailPage() {
     void refresh();
   }, [refresh]);
 
-  usePetEvents(stableRefresh);
+  const { mode } = usePetEvents(stableRefresh);
 
   const { feed, walk, bathe, sleep, play, checkStatus, toasts, dismissToast } =
     usePetActions(decodedName ?? "", stableRefresh);
@@ -58,6 +59,12 @@ export function PetDetailPage() {
       <Link to="/pets" className="text-sm text-violet-400 hover:underline">
         ← Back to pets
       </Link>
+
+      {mode === "polling" && (
+        <p className="text-xs text-slate-500">
+          Live updates unavailable — polling every {PET_POLL_INTERVAL_MS / 1_000} s.
+        </p>
+      )}
 
       {!pet.isAlive && <DeathOverlay petName={pet.name} />}
 

@@ -27,4 +27,19 @@ export default defineConfig({
   define: {
     "process.env.ANCHOR_BROWSER": JSON.stringify("true"),
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-solana": ["@solana/web3.js", "@coral-xyz/anchor", "@solana/spl-token"],
+          "vendor-wallets": [
+            "@solana/wallet-adapter-react",
+            "@solana/wallet-adapter-react-ui",
+            "@solana/wallet-adapter-wallets",
+          ],
+          "vendor-react": ["react", "react-dom", "react-router-dom"],
+        },
+      },
+    },
+  },
 });

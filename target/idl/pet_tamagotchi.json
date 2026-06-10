@@ -1424,6 +1424,11 @@
       "code": 6013,
       "name": "SameParent",
       "msg": "Both parents resolve to the same account"
+    },
+    {
+      "code": 6014,
+      "name": "SpeciesNotAscii",
+      "msg": "Species must contain only ASCII characters"
     }
   ],
   "types": [
@@ -1797,6 +1802,10 @@
           {
             "name": "name",
             "type": "string"
+          },
+          {
+            "name": "is_alive",
+            "type": "bool"
           }
         ]
       }

@@ -32,4 +32,6 @@ pub enum PetError {
     RewardOverflow,
     #[msg("Both parents resolve to the same account")]
     SameParent,
+    #[msg("Species must contain only ASCII characters")]
+    SpeciesNotAscii,
 }

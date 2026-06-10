@@ -10,6 +10,7 @@ pub struct PetBorn {
     pub offspring: Pubkey,
     pub species:   String,
     pub name:      String,
+    pub is_alive:  bool,
 }
 
 #[event]

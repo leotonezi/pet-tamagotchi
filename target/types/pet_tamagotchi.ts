@@ -1430,6 +1430,11 @@ export type PetTamagotchi = {
       "code": 6013,
       "name": "sameParent",
       "msg": "Both parents resolve to the same account"
+    },
+    {
+      "code": 6014,
+      "name": "speciesNotAscii",
+      "msg": "Species must contain only ASCII characters"
     }
   ],
   "types": [
@@ -1803,6 +1808,10 @@ export type PetTamagotchi = {
           {
             "name": "name",
             "type": "string"
+          },
+          {
+            "name": "isAlive",
+            "type": "bool"
           }
         ]
       }

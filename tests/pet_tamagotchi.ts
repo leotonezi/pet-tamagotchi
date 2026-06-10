@@ -933,6 +933,202 @@ describe("pet_tamagotchi", () => {
       // (before the mint is initialized) so re-init cannot mask a missing gate.
     }
   });
+
+  // ── R4: Breeding ──────────────────────────────────────────────────────────────
+
+  // R4-1: breed happy path — offspring exists, stats inherited, bump cached
+  it("breed: happy path — offspring created with inherited stats and bump", async () => {
+    const owner = provider.wallet.publicKey;
+    const nameA = "BreedAlpha";
+    const nameB = "BreedBeta";
+    const offspringName = "BreedChild1";
+    const offspringPda = derivePet(owner, offspringName);
+
+    await program.methods.createPet(nameA, "Dog", new BN(0)).accounts({ owner }).rpc();
+    await program.methods.createPet(nameB, "Cat", new BN(0)).accounts({ owner }).rpc();
+
+    await program.methods
+      .breed(nameA, nameB, offspringName)
+      .accounts({ owner })
+      .rpc();
+
+    const offspring = await program.account.pet.fetch(offspringPda);
+    assert.ok(offspring.owner.equals(owner), "offspring.owner set");
+    assert.strictEqual(offspring.name, offspringName, "offspring.name set");
+    assert.ok(offspring.isAlive, "offspring born alive");
+    // bump field should be non-zero (canonical bump for this PDA)
+    assert.isAbove(offspring.bump, 0, "bump cached");
+
+    // Each stat must be one of the two parents' values for that field
+    const petA = await program.account.pet.fetch(derivePet(owner, nameA));
+    const petB = await program.account.pet.fetch(derivePet(owner, nameB));
+
+    assert.include([petA.hunger,    petB.hunger],    offspring.hunger,    "hunger from a parent");
+    assert.include([petA.tiredness, petB.tiredness], offspring.tiredness, "tiredness from a parent");
+    assert.include([petA.hygiene,   petB.hygiene],   offspring.hygiene,   "hygiene from a parent");
+    assert.include([petA.happiness, petB.happiness], offspring.happiness, "happiness from a parent");
+  });
+
+  // R4-2: breed — dead parent A rejected with PetDeceased
+  it("breed: dead parent A → PetDeceased", async () => {
+    const owner = provider.wallet.publicKey;
+    const nameA = "DeadParentA";
+    const nameB = "AliveParentB";
+    const offspringName = "ShouldNotExist";
+
+    await program.methods.createPet(nameA, "Cat", new BN(0)).accounts({ owner }).rpc();
+    await program.methods.createPet(nameB, "Dog", new BN(0)).accounts({ owner }).rpc();
+
+    // Kill nameA via time warp (400h pushes hunger to 100, death on check_status)
+    const clock = await context.banksClient.getClock();
+    context.setClock(
+      new Clock(
+        clock.slot,
+        clock.epochStartTimestamp,
+        clock.epoch,
+        clock.leaderScheduleEpoch,
+        clock.unixTimestamp + BigInt(400 * 3600)
+      )
+    );
+    await program.methods.checkStatus(nameA).accounts({ owner }).rpc();
+    const deadPet = await program.account.pet.fetch(derivePet(owner, nameA));
+    assert.isFalse(deadPet.isAlive, "nameA should be dead");
+
+    await expectAnchorError(
+      program.methods.breed(nameA, nameB, offspringName).accounts({ owner }).rpc(),
+      "PetDeceased"
+    );
+  });
+
+  // R4-3: SECURITY POC [B-01 P2] — same parent name for both inputs → SameParent
+  // Demonstrates the same-parent aliasing guard fires correctly in the handler body.
+  // With name_a == name_b the two seeds resolve to the same PDA. Anchor loads the
+  // account twice (both non-mut, so no double-borrow panic), then the handler's
+  // runtime `require!` fires. This test confirms that code path executes correctly.
+  it("[B-01 POC] breed: same parent name → SameParent", async () => {
+    const owner = provider.wallet.publicKey;
+    const sameName = "SelfBreeder";
+    const offspringName = "ClonePet";
+
+    await program.methods.createPet(sameName, "Fox", new BN(0)).accounts({ owner }).rpc();
+
+    await expectAnchorError(
+      program.methods.breed(sameName, sameName, offspringName).accounts({ owner }).rpc(),
+      "SameParent"
+    );
+  });
+
+  // R4-4: SECURITY POC [B-03 P1] — offspring_name matches existing pet
+  // Confirms `init` (not `init_if_needed`) blocks re-initialization of an existing
+  // pet account. The existing account must be completely unchanged after the attempt.
+  it("[B-03 POC] breed: offspring_name resolves to existing account → init rejected", async () => {
+    const owner = provider.wallet.publicKey;
+    const nameA = "ReInitParentA";
+    const nameB = "ReInitParentB";
+    const existingName = "ExistingPet";
+
+    await program.methods.createPet(nameA, "Dog", new BN(0)).accounts({ owner }).rpc();
+    await program.methods.createPet(nameB, "Cat", new BN(0)).accounts({ owner }).rpc();
+    await program.methods.createPet(existingName, "Rabbit", new BN(0)).accounts({ owner }).rpc();
+
+    const before = await program.account.pet.fetch(derivePet(owner, existingName));
+
+    let threw = false;
+    try {
+      await program.methods
+        .breed(nameA, nameB, existingName)
+        .accounts({ owner })
+        .rpc();
+    } catch {
+      threw = true;
+    }
+    assert.isTrue(threw, "[B-03] breeding into existing account must be rejected");
+
+    // Existing pet must be completely unchanged
+    const after = await program.account.pet.fetch(derivePet(owner, existingName));
+    assert.strictEqual(after.species, before.species, "species unchanged");
+    assert.strictEqual(after.hunger,  before.hunger,  "hunger unchanged");
+    assert.ok(after.isAlive, "existing pet still alive");
+  });
+
+  // R4-5: SECURITY POC [B-09 P2] — offspring born dead when inherited stats are lethal
+  // refresh_needs_and_health fires immediately after stat assignment. If inherited
+  // hunger > 95 (possible when both parents are critically hungry), is_alive is set to
+  // false before the function returns. PetBorn is still emitted; the owner pays rent
+  // for an account that can never be interacted with. No error is returned.
+  it("[B-09 POC] breed: critically-hungry parents produce stillborn offspring", async () => {
+    const owner = provider.wallet.publicKey;
+    const nameA = "CritParentA";
+    const nameB = "CritParentB";
+    const offspringName = "StillbornChild";
+    const offspringPda = derivePet(owner, offspringName);
+
+    await program.methods.createPet(nameA, "Snake", new BN(0)).accounts({ owner }).rpc();
+    await program.methods.createPet(nameB, "Snake", new BN(0)).accounts({ owner }).rpc();
+
+    // Warp 380h: hunger_gain = 380/4 = 95; 30+95 = 125 → clamped 100 (>95 = death zone).
+    // Do NOT call check_status — death is lazy, so is_alive remains true on-chain,
+    // allowing the breed constraint to pass.
+    const clockNow = await context.banksClient.getClock();
+    context.setClock(
+      new Clock(
+        clockNow.slot,
+        clockNow.epochStartTimestamp,
+        clockNow.epoch,
+        clockNow.leaderScheduleEpoch,
+        clockNow.unixTimestamp + BigInt(380 * 3600)
+      )
+    );
+
+    const pA = await program.account.pet.fetch(derivePet(owner, nameA));
+    assert.ok(pA.isAlive, "parent A lazy-alive (death not yet realized on-chain)");
+
+    // Breed succeeds (no error), but offspring is dead
+    await program.methods
+      .breed(nameA, nameB, offspringName)
+      .accounts({ owner })
+      .rpc();
+
+    const offspring = await program.account.pet.fetch(offspringPda);
+    assert.isFalse(
+      offspring.isAlive,
+      "[B-09 CONFIRMED] Offspring is dead at birth. PetBorn was emitted but " +
+      "is_alive=false. Owner paid rent for an unusable account."
+    );
+  });
+
+  // R4-6: SECURITY POC [B-08 P2] — multibyte UTF-8 species silently falls back to parent A
+  // Byte-midpoint split on a non-ASCII species string produces invalid UTF-8.
+  // from_utf8 returns Err; the unwrap_or_else fallback silently substitutes pet_a.species.
+  // No error is surfaced; PetBorn emits the unblended species, misleading off-chain indexers.
+  it("[B-08 POC] breed: multibyte UTF-8 species → silent fallback to parent A species", async () => {
+    const owner = provider.wallet.publicKey;
+    const nameA = "UniParentA";
+    const nameB = "UniParentB";
+    const offspringName = "UniChild";
+    const offspringPda = derivePet(owner, offspringName);
+
+    // "龍" is 3 bytes (0xE9 0xBE 0x8D). Splitting at byte index 1 ([0xE9]) is invalid UTF-8.
+    const speciesA = "龙"; // CJK character "龍"
+    const speciesB = "Dog";
+
+    await program.methods.createPet(nameA, speciesA, new BN(0)).accounts({ owner }).rpc();
+    await program.methods.createPet(nameB, speciesB, new BN(0)).accounts({ owner }).rpc();
+
+    await program.methods
+      .breed(nameA, nameB, offspringName)
+      .accounts({ owner })
+      .rpc();
+
+    const offspring = await program.account.pet.fetch(offspringPda);
+
+    // [B-08 CONFIRMED]: offspring.species equals speciesA — blend silently fell back.
+    assert.strictEqual(
+      offspring.species,
+      speciesA,
+      "[B-08 CONFIRMED] UTF-8 blend failed silently; offspring got parent A species unmodified."
+    );
+  });
 });
 
 // ── R4: Breed ─────────────────────────────────────────────────────────────────

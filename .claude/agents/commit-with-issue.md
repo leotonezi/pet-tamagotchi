@@ -82,7 +82,6 @@ PR body must include:
 - `## Summary` — 1–3 bullets describing what changed and why
 - `## Test plan` — checklist of what was tested (bankrun, tsc, clippy, anchor test)
 - `Closes #N` for each issue (GitHub closes on merge to master)
-- `🤖 Generated with [Claude Code](https://claude.com/claude-code)`
 
 ### 6. Confirm
 - Run `rtk git status` — confirm clean

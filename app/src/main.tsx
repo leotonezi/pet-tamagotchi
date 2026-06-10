@@ -10,13 +10,18 @@ import {
   PhantomWalletAdapter,
   SolflareWalletAdapter,
 } from "@solana/wallet-adapter-wallets";
+import { BackpackWalletAdapter } from "@solana/wallet-adapter-backpack";
 import { ClientProvider } from "./context/ClientContext";
 import { SOLANA_ENDPOINT } from "./constants";
 import App from "./App";
 import "@solana/wallet-adapter-react-ui/styles.css";
 import "./index.css";
 
-const wallets = [new PhantomWalletAdapter(), new SolflareWalletAdapter()];
+const wallets = [
+  new PhantomWalletAdapter(),
+  new SolflareWalletAdapter(),
+  new BackpackWalletAdapter(),
+];
 
 // Adapter components are typed against React 17's FC; cast to accept children.
 const Conn = ConnectionProvider as unknown as (props: {
@@ -24,7 +29,7 @@ const Conn = ConnectionProvider as unknown as (props: {
   children: ReactNode;
 }) => ReactNode;
 const WalletProv = WalletProvider as unknown as (props: {
-  wallets: (PhantomWalletAdapter | SolflareWalletAdapter)[];
+  wallets: (PhantomWalletAdapter | SolflareWalletAdapter | BackpackWalletAdapter)[];
   autoConnect: boolean;
   children: ReactNode;
 }) => ReactNode;

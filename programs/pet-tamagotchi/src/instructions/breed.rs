@@ -86,10 +86,12 @@ pub(crate) fn handle_breed(
 
     let now = Clock::get()?.unix_timestamp;
 
-    // SECURITY [B-05 P1 FIXED]: hashv over full 32-byte slot hash + tx-unique inputs
-    // raises manipulation cost vs a raw single byte. A colluding block producer can
-    // still iterate slot hashes to find a favorable output; a commit-reveal scheme is
-    // the production fix (deferred R8+).
+    // SECURITY [B-05 P1 FIXED → B-05-R P2]: hashv over full 32-byte slot hash +
+    // tx-unique inputs raises manipulation cost vs a raw single byte. Residual risk:
+    // all inputs except the slot hash are attacker-controlled (owner, pet PDAs,
+    // offspring_name). An attacker enumerates offspring_name values offline (~16
+    // SHA-256 ops on average) to hit any of the 16 possible stat-inheritance patterns.
+    // A commit-reveal scheme is the production fix (deferred R8+).
     //
     // SlotHashes layout: 8-byte count, then entries of (u64 slot, [u8;32] hash).
     // Minimum bytes to read the full first hash: 8 (count) + 8 (slot) + 32 (hash) = 48.

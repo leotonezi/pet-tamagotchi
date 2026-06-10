@@ -27,6 +27,11 @@ pub fn apply_time_decay(pet: &mut Pet, now: i64) -> Result<()> {
         return Ok(());
     }
 
+    // SECURITY [S-01 P2]: `(elapsed_secs / 3600) as u16` truncates silently in release
+    // builds when elapsed > 65535 hours (≈ 2730 days). At multiples of 65536h the cast
+    // wraps to 0 and ALL decay deltas become 0, allowing a pet to survive indefinitely
+    // past the point where game logic requires death. Fix: use u32 (covers 4M+ days)
+    // or clamp before casting: `((elapsed_secs / 3600).min(u32::MAX as i64)) as u32`.
     let hours = (elapsed_secs / 3600) as u16;
 
     // hunger +1 per 4 hours

@@ -61,9 +61,22 @@ rtk git push -u origin <current-branch>
 ```bash
 gh pr create \
   --base <target>  \
+  --assignee leotonezi \
   --title "<same as commit subject, without type prefix if redundant>" \
   --body "..."
 ```
+
+After creating the PR, add labels via REST API (avoids GraphQL deprecation warning):
+```bash
+gh api repos/leotonezi/pet-tamagotchi/issues/<PR_NUMBER>/labels \
+  -X POST -f 'labels[]=<label>'
+```
+
+Choose label(s) that match the PR type:
+- `refactor` — code restructure, no behavior change
+- `enhancement` — new feature
+- `bug` — bug fix
+- `documentation` — docs only
 
 PR body must include:
 - `## Summary` — 1–3 bullets describing what changed and why

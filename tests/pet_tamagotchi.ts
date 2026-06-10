@@ -1,7 +1,7 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program, AnchorError } from "@coral-xyz/anchor";
 import BN from "bn.js";
-import { Keypair, PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { Keypair, PublicKey, LAMPORTS_PER_SOL, SYSVAR_SLOT_HASHES_PUBKEY } from "@solana/web3.js";
 import { startAnchor, BankrunProvider } from "anchor-bankrun";
 import { Clock } from "solana-bankrun";
 import { assert } from "chai";
@@ -932,5 +932,334 @@ describe("pet_tamagotchi", () => {
       // SECURITY [S-03]: To definitively confirm the gate, run this test BEFORE R2-1
       // (before the mint is initialized) so re-init cannot mask a missing gate.
     }
+  });
+});
+
+// ── R4: Breed ─────────────────────────────────────────────────────────────────
+//
+// Uses a dedicated context so breed tests are isolated from the state mutations
+// accumulated by the pet_tamagotchi suite (dead pets, exhausted stats, etc.).
+
+describe("breed", () => {
+  let context: Awaited<ReturnType<typeof startAnchor>>;
+  let provider: BankrunProvider;
+  let program: Program<PetTamagotchi>;
+  const owner = () => provider.wallet.publicKey;
+
+  before(async () => {
+    context = await startAnchor(".", [], []);
+    provider = new BankrunProvider(context);
+    anchor.setProvider(provider);
+    program = new anchor.Program(IDL as PetTamagotchi, provider);
+  });
+
+  // ── R4-1: Happy path ─────────────────────────────────────────────────────────
+  it("breed: two healthy pets → offspring PDA exists, is_alive=true, stats from one parent per stat, species blended", async () => {
+    // arrange
+    const nameA = "BreedAlpha";
+    const nameB = "BreedBeta";
+    const offspringName = "BreedChild";
+    const o = owner();
+
+    await program.methods.createPet(nameA, "Dragon", new BN(0)).accounts({ owner: o }).rpc();
+    await program.methods.createPet(nameB, "Phoenix", new BN(0)).accounts({ owner: o }).rpc();
+
+    const petA = await program.account.pet.fetch(derivePet(o, nameA));
+    const petB = await program.account.pet.fetch(derivePet(o, nameB));
+
+    // act
+    await program.methods
+      .breed(nameA, nameB, offspringName)
+      .accounts({ owner: o, slotHashes: SYSVAR_SLOT_HASHES_PUBKEY })
+      .rpc();
+
+    // assert
+    const offspringPda = derivePet(o, offspringName);
+    const offspring = await program.account.pet.fetch(offspringPda);
+
+    assert.ok(offspring.isAlive, "offspring is_alive = true");
+    assert.ok(offspring.owner.equals(o), "offspring owner matches");
+    assert.strictEqual(offspring.name, offspringName, "offspring name matches");
+
+    // Each stat must come from one of the two parents
+    assert.ok(
+      offspring.hunger === petA.hunger || offspring.hunger === petB.hunger,
+      `hunger ${offspring.hunger} should be ${petA.hunger} or ${petB.hunger}`
+    );
+    assert.ok(
+      offspring.tiredness === petA.tiredness || offspring.tiredness === petB.tiredness,
+      `tiredness ${offspring.tiredness} should be ${petA.tiredness} or ${petB.tiredness}`
+    );
+    assert.ok(
+      offspring.hygiene === petA.hygiene || offspring.hygiene === petB.hygiene,
+      `hygiene ${offspring.hygiene} should be ${petA.hygiene} or ${petB.hygiene}`
+    );
+    assert.ok(
+      offspring.happiness === petA.happiness || offspring.happiness === petB.happiness,
+      `happiness ${offspring.happiness} should be ${petA.happiness} or ${petB.happiness}`
+    );
+
+    // Species blend: first half of A's species + second half of B's species, ≤ 16 bytes
+    const aBytes = Buffer.from("Dragon");          // 6 bytes
+    const bBytes = Buffer.from("Phoenix");         // 7 bytes
+    const halfA = Math.floor(aBytes.length / 2);  // 3
+    const halfBStart = Math.floor(bBytes.length / 2); // 3
+    const expected = Buffer.concat([
+      aBytes.subarray(0, halfA),
+      bBytes.subarray(halfBStart),
+    ]).toString("utf8").slice(0, 16);
+    assert.strictEqual(offspring.species, expected, `species should be ${expected}`);
+
+    assert.isAtMost(offspring.species.length, 16, "species ≤ 16 chars");
+  });
+
+  // ── R4-2: SameParent error ────────────────────────────────────────────────────
+  it("breed: same name for both parents → SameParent", async () => {
+    // arrange — pet already exists from R4-1
+    const o = owner();
+
+    // act + assert
+    await expectAnchorError(
+      program.methods
+        .breed("BreedAlpha", "BreedAlpha", "SameChild")
+        .accounts({ owner: o, slotHashes: SYSVAR_SLOT_HASHES_PUBKEY })
+        .rpc(),
+      "SameParent"
+    );
+  });
+
+  // ── R4-3: Dead parent A → PetDeceased ────────────────────────────────────────
+  it("breed: dead parent A → PetDeceased", async () => {
+    // arrange — create two pets, kill parent A via time warp + checkStatus
+    const o = owner();
+    const nameA = "DeadParentA";
+    const nameB = "AliveParentB";
+    const offspringName = "DeadOffspringA";
+
+    await program.methods.createPet(nameA, "Cat", new BN(0)).accounts({ owner: o }).rpc();
+    await program.methods.createPet(nameB, "Dog", new BN(0)).accounts({ owner: o }).rpc();
+
+    // Warp 400h: hunger = 30 + 100 = 130 → clamped 100 > 95 → death
+    const clock = await context.banksClient.getClock();
+    context.setClock(
+      new Clock(
+        clock.slot,
+        clock.epochStartTimestamp,
+        clock.epoch,
+        clock.leaderScheduleEpoch,
+        clock.unixTimestamp + BigInt(400 * 3600)
+      )
+    );
+    await program.methods.checkStatus(nameA).accounts({ owner: o }).rpc();
+
+    const deadPet = await program.account.pet.fetch(derivePet(o, nameA));
+    assert.isFalse(deadPet.isAlive, "parent A should be dead before breeding");
+
+    // Reset clock so parent B stays alive
+    context.setClock(
+      new Clock(
+        clock.slot,
+        clock.epochStartTimestamp,
+        clock.epoch,
+        clock.leaderScheduleEpoch,
+        clock.unixTimestamp
+      )
+    );
+
+    // act + assert
+    await expectAnchorError(
+      program.methods
+        .breed(nameA, nameB, offspringName)
+        .accounts({ owner: o, slotHashes: SYSVAR_SLOT_HASHES_PUBKEY })
+        .rpc(),
+      "PetDeceased"
+    );
+  });
+
+  // ── R4-4: Dead parent B → PetDeceased ────────────────────────────────────────
+  it("breed: dead parent B → PetDeceased", async () => {
+    // arrange — create two pets, kill parent B via time warp + checkStatus
+    const o = owner();
+    const nameA = "AliveParentA2";
+    const nameB = "DeadParentB";
+    const offspringName = "DeadOffspringB";
+
+    await program.methods.createPet(nameA, "Rabbit", new BN(0)).accounts({ owner: o }).rpc();
+    await program.methods.createPet(nameB, "Lizard", new BN(0)).accounts({ owner: o }).rpc();
+
+    // Kill parent B with a far-future warp
+    const clock = await context.banksClient.getClock();
+    context.setClock(
+      new Clock(
+        clock.slot,
+        clock.epochStartTimestamp,
+        clock.epoch,
+        clock.leaderScheduleEpoch,
+        clock.unixTimestamp + BigInt(400 * 3600)
+      )
+    );
+    await program.methods.checkStatus(nameB).accounts({ owner: o }).rpc();
+
+    const deadPet = await program.account.pet.fetch(derivePet(o, nameB));
+    assert.isFalse(deadPet.isAlive, "parent B should be dead before breeding");
+
+    // Reset clock so parent A is not killed
+    context.setClock(
+      new Clock(
+        clock.slot,
+        clock.epochStartTimestamp,
+        clock.epoch,
+        clock.leaderScheduleEpoch,
+        clock.unixTimestamp
+      )
+    );
+
+    // act + assert
+    await expectAnchorError(
+      program.methods
+        .breed(nameA, nameB, offspringName)
+        .accounts({ owner: o, slotHashes: SYSVAR_SLOT_HASHES_PUBKEY })
+        .rpc(),
+      "PetDeceased"
+    );
+  });
+
+  // ── R4-5: Unauthorized — attacker cannot breed using another owner's pets ─────
+  it("breed: attacker cannot breed using another owner's pets", async () => {
+    // arrange — default owner's pets exist from R4-1
+    const o = owner();
+    const nameA = "BreedAlpha";
+    const nameB = "BreedBeta";
+
+    const attacker = Keypair.generate();
+    context.setAccount(attacker.publicKey, {
+      executable: false,
+      owner: new PublicKey("11111111111111111111111111111111"),
+      lamports: 2_000_000_000,
+      data: new Uint8Array(0),
+    });
+
+    const attackerProvider = new BankrunProvider(context, new anchor.Wallet(attacker));
+    const attackerProgram = new anchor.Program<PetTamagotchi>(
+      IDL as PetTamagotchi,
+      attackerProvider
+    );
+
+    // Attacker passes their own pubkey as owner — PDAs derived from attacker key don't exist
+    let threw = false;
+    try {
+      await attackerProgram.methods
+        .breed(nameA, nameB, "AttackerOffspring")
+        .accounts({ owner: attacker.publicKey, slotHashes: SYSVAR_SLOT_HASHES_PUBKEY })
+        .signers([attacker])
+        .rpc();
+    } catch {
+      threw = true;
+    }
+    assert.isTrue(threw, "attacker was correctly rejected");
+  });
+
+  // ── R4-6: NameTooLong — offspring name > 32 bytes fails ─────────────────────
+  it("breed: offspring name > 32 bytes → error thrown (seed length or NameTooLong)", async () => {
+    // Note: Solana enforces a 32-byte maximum per PDA seed. A 33-byte name causes
+    // the client-side PDA derivation to throw before the instruction even reaches
+    // the program (same behavior as createPet NameTooLong — see test 2 comment).
+    // We verify that some error is thrown.
+    const o = owner();
+    const longName = "A".repeat(33); // 33 bytes > MAX_NAME_LEN(32)
+
+    let threw = false;
+    try {
+      await program.methods
+        .breed("BreedAlpha", "BreedBeta", longName)
+        .accounts({ owner: o, slotHashes: SYSVAR_SLOT_HASHES_PUBKEY })
+        .rpc();
+    } catch {
+      threw = true;
+    }
+    assert.isTrue(threw, "expected an error for 33-byte offspring name");
+  });
+
+  // ── R4-7: Species blend with known inputs ────────────────────────────────────
+  it("breed: species correctly blended from two single-char-halved species strings", async () => {
+    // "AB" (2 bytes): half_a = 1, take "A"
+    // "CD" (2 bytes): len/2 = 1, take "D"
+    // Expected species = "AD"
+    const o = owner();
+    const nameA = "BlendParentA";
+    const nameB = "BlendParentB";
+    const offspringName = "BlendOffspring";
+
+    await program.methods.createPet(nameA, "AB", new BN(0)).accounts({ owner: o }).rpc();
+    await program.methods.createPet(nameB, "CD", new BN(0)).accounts({ owner: o }).rpc();
+
+    await program.methods
+      .breed(nameA, nameB, offspringName)
+      .accounts({ owner: o, slotHashes: SYSVAR_SLOT_HASHES_PUBKEY })
+      .rpc();
+
+    const offspring = await program.account.pet.fetch(derivePet(o, offspringName));
+    // "AB": half_a = floor(2/2) = 1 → "A"
+    // "CD": second half start = floor(2/2) = 1 → "D"
+    // blended = "A" + "D" = "AD"
+    assert.strictEqual(offspring.species, "AD", `expected species "AD", got "${offspring.species}"`);
+  });
+
+  // ── R4-8: Time-warp decay is NOT applied to parents during breed ─────────────
+  it("breed: parent stats in offspring reflect stored values, not time-decayed values", async () => {
+    // arrange — create two pets, warp clock but do NOT call checkStatus
+    // The breed instruction reads stored (non-decayed) stats from parent accounts
+    const o = owner();
+    const nameA = "TimeWarpParentA";
+    const nameB = "TimeWarpParentB";
+    const offspringName = "TimeWarpOffspring";
+
+    await program.methods.createPet(nameA, "Wolf", new BN(0)).accounts({ owner: o }).rpc();
+    await program.methods.createPet(nameB, "Bear", new BN(0)).accounts({ owner: o }).rpc();
+
+    // Record stored stats before time warp
+    const petABefore = await program.account.pet.fetch(derivePet(o, nameA));
+    const petBBefore = await program.account.pet.fetch(derivePet(o, nameB));
+
+    // Warp clock 24h without calling checkStatus (stats remain at stored values)
+    const clock = await context.banksClient.getClock();
+    context.setClock(
+      new Clock(
+        clock.slot,
+        clock.epochStartTimestamp,
+        clock.epoch,
+        clock.leaderScheduleEpoch,
+        clock.unixTimestamp + BigInt(24 * 3600)
+      )
+    );
+
+    // act — breed without any checkStatus (parents' on-chain stats are pre-warp values)
+    await program.methods
+      .breed(nameA, nameB, offspringName)
+      .accounts({ owner: o, slotHashes: SYSVAR_SLOT_HASHES_PUBKEY })
+      .rpc();
+
+    const offspring = await program.account.pet.fetch(derivePet(o, offspringName));
+
+    // Offspring stats must equal the PRE-WARP stored values (breed does not apply decay)
+    assert.ok(
+      offspring.hunger === petABefore.hunger || offspring.hunger === petBBefore.hunger,
+      `offspring hunger (${offspring.hunger}) should equal pre-warp parent value, not time-decayed value`
+    );
+    assert.ok(
+      offspring.hygiene === petABefore.hygiene || offspring.hygiene === petBBefore.hygiene,
+      `offspring hygiene (${offspring.hygiene}) should equal pre-warp parent value`
+    );
+
+    // Reset clock for subsequent tests
+    context.setClock(
+      new Clock(
+        clock.slot,
+        clock.epochStartTimestamp,
+        clock.epoch,
+        clock.leaderScheduleEpoch,
+        clock.unixTimestamp
+      )
+    );
   });
 });

@@ -17,5 +17,9 @@ dist/
 # Solana test validator ledger
 test-ledger/
 
+# Env (local overrides; .env.example is committed)
+app/.env.local
+app/.env.*.local
+
 # OS
 .DS_Store

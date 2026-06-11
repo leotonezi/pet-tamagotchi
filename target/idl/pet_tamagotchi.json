@@ -54,7 +54,123 @@
       ],
       "args": [
         {
-          "name": "_name",
+          "name": "name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "breed",
+      "discriminator": [
+        215,
+        166,
+        48,
+        89,
+        209,
+        205,
+        125,
+        11
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "pet_a",
+            "pet_b"
+          ]
+        },
+        {
+          "name": "pet_a",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "arg",
+                "path": "name_a"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pet_b",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "arg",
+                "path": "name_b"
+              }
+            ]
+          }
+        },
+        {
+          "name": "offspring",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "arg",
+                "path": "offspring_name"
+              }
+            ]
+          }
+        },
+        {
+          "name": "slot_hashes",
+          "address": "SysvarS1otHashes111111111111111111111111111"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "name_a",
+          "type": "string"
+        },
+        {
+          "name": "name_b",
+          "type": "string"
+        },
+        {
+          "name": "offspring_name",
           "type": "string"
         }
       ]
@@ -190,7 +306,7 @@
       ],
       "args": [
         {
-          "name": "_name",
+          "name": "name",
           "type": "string"
         }
       ]
@@ -547,7 +663,7 @@
       ],
       "args": [
         {
-          "name": "_name",
+          "name": "name",
           "type": "string"
         }
       ]
@@ -820,7 +936,7 @@
       ],
       "args": [
         {
-          "name": "_name",
+          "name": "name",
           "type": "string"
         }
       ]
@@ -872,7 +988,7 @@
       ],
       "args": [
         {
-          "name": "_name",
+          "name": "name",
           "type": "string"
         }
       ]
@@ -955,7 +1071,7 @@
           "type": "u8"
         },
         {
-          "name": "_pet_name",
+          "name": "pet_name",
           "type": "string"
         }
       ]
@@ -1007,7 +1123,7 @@
       ],
       "args": [
         {
-          "name": "_name",
+          "name": "name",
           "type": "string"
         }
       ]
@@ -1144,6 +1260,19 @@
         160,
         62,
         27
+      ]
+    },
+    {
+      "name": "PetBorn",
+      "discriminator": [
+        208,
+        149,
+        9,
+        25,
+        32,
+        122,
+        145,
+        49
       ]
     },
     {
@@ -1290,6 +1419,16 @@
       "code": 6012,
       "name": "RewardOverflow",
       "msg": "Reward amount calculation overflowed"
+    },
+    {
+      "code": 6013,
+      "name": "SameParent",
+      "msg": "Both parents resolve to the same account"
+    },
+    {
+      "code": 6014,
+      "name": "SpeciesNotAscii",
+      "msg": "Species must contain only ASCII characters"
     }
   ],
   "types": [
@@ -1631,6 +1770,42 @@
           {
             "name": "happiness",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PetBorn",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "parent_a",
+            "type": "pubkey"
+          },
+          {
+            "name": "parent_b",
+            "type": "pubkey"
+          },
+          {
+            "name": "offspring",
+            "type": "pubkey"
+          },
+          {
+            "name": "species",
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "is_alive",
+            "type": "bool"
           }
         ]
       }

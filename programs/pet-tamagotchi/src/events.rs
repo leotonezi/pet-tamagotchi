@@ -3,6 +3,17 @@ use anchor_lang::prelude::*;
 // ── Events ────────────────────────────────────────────────────────────────────
 
 #[event]
+pub struct PetBorn {
+    pub owner:     Pubkey,
+    pub parent_a:  Pubkey,
+    pub parent_b:  Pubkey,
+    pub offspring: Pubkey,
+    pub species:   String,
+    pub name:      String,
+    pub is_alive:  bool,
+}
+
+#[event]
 pub struct PetCreated {
     pub owner:   Pubkey,
     pub name:    String,

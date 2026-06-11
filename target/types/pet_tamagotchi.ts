@@ -66,6 +66,122 @@ export type PetTamagotchi = {
       ]
     },
     {
+      "name": "breed",
+      "discriminator": [
+        215,
+        166,
+        48,
+        89,
+        209,
+        205,
+        125,
+        11
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "petA",
+            "petB"
+          ]
+        },
+        {
+          "name": "petA",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "arg",
+                "path": "nameA"
+              }
+            ]
+          }
+        },
+        {
+          "name": "petB",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "arg",
+                "path": "nameB"
+              }
+            ]
+          }
+        },
+        {
+          "name": "offspring",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "arg",
+                "path": "offspringName"
+              }
+            ]
+          }
+        },
+        {
+          "name": "slotHashes",
+          "address": "SysvarS1otHashes111111111111111111111111111"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "nameA",
+          "type": "string"
+        },
+        {
+          "name": "nameB",
+          "type": "string"
+        },
+        {
+          "name": "offspringName",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "buyItem",
       "discriminator": [
         80,
@@ -1153,6 +1269,19 @@ export type PetTamagotchi = {
       ]
     },
     {
+      "name": "petBorn",
+      "discriminator": [
+        208,
+        149,
+        9,
+        25,
+        32,
+        122,
+        145,
+        49
+      ]
+    },
+    {
       "name": "petCreated",
       "discriminator": [
         70,
@@ -1296,6 +1425,16 @@ export type PetTamagotchi = {
       "code": 6012,
       "name": "rewardOverflow",
       "msg": "Reward amount calculation overflowed"
+    },
+    {
+      "code": 6013,
+      "name": "sameParent",
+      "msg": "Both parents resolve to the same account"
+    },
+    {
+      "code": 6014,
+      "name": "speciesNotAscii",
+      "msg": "Species must contain only ASCII characters"
     }
   ],
   "types": [
@@ -1637,6 +1776,42 @@ export type PetTamagotchi = {
           {
             "name": "happiness",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "petBorn",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "parentA",
+            "type": "pubkey"
+          },
+          {
+            "name": "parentB",
+            "type": "pubkey"
+          },
+          {
+            "name": "offspring",
+            "type": "pubkey"
+          },
+          {
+            "name": "species",
+            "type": "string"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "isAlive",
+            "type": "bool"
           }
         ]
       }

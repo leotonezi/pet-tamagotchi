@@ -30,4 +30,8 @@ pub enum PetError {
     MintMismatch,
     #[msg("Reward amount calculation overflowed")]
     RewardOverflow,
+    #[msg("Both parents resolve to the same account")]
+    SameParent,
+    #[msg("Species must contain only ASCII characters")]
+    SpeciesNotAscii,
 }

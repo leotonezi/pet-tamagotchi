@@ -33,7 +33,9 @@ pub(crate) fn handle_create_pet(
 ) -> Result<()> {
     require!(!name.is_empty(), PetError::NameEmpty);
     require!(name.len() <= MAX_NAME_LEN, PetError::NameTooLong);
+    require!(!species.is_empty(), PetError::SpeciesTooLong);
     require!(species.len() <= MAX_SPECIES_LEN, PetError::SpeciesTooLong);
+    require!(species.is_ascii(), PetError::SpeciesNotAscii);
 
     let now = Clock::get()?.unix_timestamp;
     let hunger = 30u8;

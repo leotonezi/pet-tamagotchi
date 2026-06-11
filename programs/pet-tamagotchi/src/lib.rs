@@ -18,6 +18,7 @@ pub use items::*;
 pub use state::*;
 pub use helpers::{apply_stat_delta, apply_time_decay, compute_health, refresh_needs_and_health};
 pub use instructions::{
+    breed::Breed,
     create_pet::CreatePet,
     pet_actions::{CheckStatus, PetAction},
     inventory::{BuyItem, InitInventory, UseItem},
@@ -26,6 +27,7 @@ pub use instructions::{
 
 // Re-export Anchor-generated internal modules so the #[program] macro can find
 // them at crate root via `crate::__client_accounts_*`.
+pub(crate) use instructions::breed::__client_accounts_breed;
 pub(crate) use instructions::create_pet::__client_accounts_create_pet;
 pub(crate) use instructions::pet_actions::{
     __client_accounts_check_status,
@@ -101,5 +103,14 @@ pub mod pet_tamagotchi {
         birth_date: i64,
     ) -> Result<()> {
         instructions::create_pet::handle_create_pet(ctx, name, species, birth_date)
+    }
+
+    pub fn breed(
+        ctx: Context<Breed>,
+        name_a: String,
+        name_b: String,
+        offspring_name: String,
+    ) -> Result<()> {
+        instructions::breed::handle_breed(ctx, name_a, name_b, offspring_name)
     }
 }
